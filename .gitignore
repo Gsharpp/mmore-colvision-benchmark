@@ -1,0 +1,73 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.python-version.local
+
+# uv
+.uv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (large, lives on RCP)
+data/
+*.parquet
+*.pdf
+*.png
+*.jpg
+*.jpeg
+
+# Milvus
+*.db
+milvus_data/
+
+# Models (downloaded, large)
+models/
+*.bin
+*.safetensors
+*.gguf
+
+# Secrets
+.env
+.env.local
+*.key
+
+# LaTeX intermediate files
+report/*.aux
+report/*.log
+report/*.out
+report/*.toc
+report/*.bbl
+report/*.blg
+report/*.synctex.gz
+
+# Logs
+*.log
+logs/
+
+# Temporary
+tmp/
+*.tmp
