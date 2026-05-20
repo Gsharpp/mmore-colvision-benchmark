@@ -20,8 +20,7 @@ classifiers = [
 dependencies = [
     # mmore pipeline (PR 305 fork, ColVision models)
     "mmore[colpali,rag]",
-    # Benchmark frameworks
-    "vidore-benchmark>=5.0",
+    # Generation eval (retrieval metrics implemented in-tree)
     "ragas>=0.2",
     # HuggingFace / data
     "datasets>=2.20",
