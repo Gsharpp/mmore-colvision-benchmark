@@ -1,0 +1,31 @@
+# Track A — main benchmark on English medical PDFs with figures.
+# Scaling study: same model evaluated at increasing corpus sizes.
+
+corpus:
+  language: "en"
+  source: "pmc-oa"
+  visual_density_threshold: 0.30
+  mesh_filter:
+    include_top_level: ["A", "C", "E"]   # Anatomy, Diseases, Analytical & Diagnostic Techniques
+
+scaling_paliers:
+  - id: tiny
+    n_pages: 100
+  - id: small
+    n_pages: 1000
+  - id: medium
+    n_pages: 10000
+  - id: large
+    n_pages: 50000
+
+queries:
+  per_palier:
+    tiny: 50
+    small: 200
+    medium: 500
+    large: 1500
+
+retrieval:
+  top_k: 10
+
+seeds: [0, 1, 2]

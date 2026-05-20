@@ -1,0 +1,43 @@
+# Track B — multilingual benchmark. 6 languages, ~1.5k pages each.
+# Same metrics as Track A, but no scaling; focus on cross-script performance.
+
+languages:
+  - code: en
+    name: "English"
+    source: "pmc-oa"
+    pages_target: 1500
+
+  - code: fr
+    name: "French"
+    source: "hal"
+    pages_target: 1500
+
+  - code: de
+    name: "German"
+    source: "thieme-oa"
+    pages_target: 1500
+
+  - code: es
+    name: "Spanish"
+    source: "scielo"
+    pages_target: 1500
+
+  - code: zh
+    name: "Chinese (Simplified)"
+    source: "cnki-oa"
+    pages_target: 1500
+    notes: "Logographic script — major VLM challenge"
+
+  - code: ar
+    name: "Arabic"
+    source: "saudi-med"
+    pages_target: 1500
+    notes: "RTL + connected script — VLM edge case"
+
+queries:
+  per_language: 200
+
+retrieval:
+  top_k: 10
+
+seeds: [0, 1, 2]

@@ -1,0 +1,43 @@
+# ColVision models under benchmark.
+# Each entry follows the mmore model_utils.py registry naming.
+
+models:
+  - id: colpali_v1_3
+    hf_name: "vidore/colpali-v1.3"
+    family: "ColPali"
+    embed_dim: 128
+    dtype: "bfloat16"
+    process_batch_size: 8
+    pdf_dpi: 200
+
+  - id: colqwen2_v1_0
+    hf_name: "vidore/colqwen2-v1.0"
+    family: "ColQwen2"
+    embed_dim: 128
+    dtype: "bfloat16"
+    process_batch_size: 8
+    pdf_dpi: 200
+
+  - id: colqwen2_5_v0_2
+    hf_name: "vidore/colqwen2.5-v0.2"
+    family: "ColQwen2.5"
+    embed_dim: 128
+    dtype: "bfloat16"
+    process_batch_size: 8
+    pdf_dpi: 200
+
+  - id: colqwen3_v0_1
+    hf_name: "vidore/colqwen3-v0.1"
+    family: "ColQwen3"
+    embed_dim: 320
+    dtype: "bfloat16"
+    process_batch_size: 4   # higher dim → smaller batch
+    pdf_dpi: 200
+
+  - id: colgemma3_colnetra
+    hf_name: "Cognitive-Lab/ColNetraEmbed"
+    family: "ColGemma3"
+    embed_dim: 128
+    dtype: "bfloat16"
+    process_batch_size: 8
+    pdf_dpi: 200
