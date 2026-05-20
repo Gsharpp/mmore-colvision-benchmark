@@ -1,0 +1,98 @@
+[project]
+name = "mmore-colvision-benchmark"
+version = "0.1.0"
+description = "Benchmark suite comparing ColVision models within the mmore RAG pipeline (PR #305)."
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+authors = [
+    { name = "Mathieu Bonnet", email = "mathieu.bonnet@telecom-sudparis.eu" },
+]
+license = { text = "Apache-2.0" }
+keywords = ["rag", "colpali", "colvision", "vlm", "benchmark", "medical", "multilingual"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    # mmore pipeline (PR 305 fork, ColVision models)
+    "mmore[colpali,rag]",
+    # Benchmark frameworks
+    "vidore-benchmark>=5.0",
+    "ragas>=0.2",
+    # HuggingFace / data
+    "datasets>=2.20",
+    "huggingface-hub>=0.24",
+    # Statistics
+    "scipy>=1.13",
+    "numpy>=1.26,<2",
+    "pandas>=2.1",
+    # Visualization
+    "matplotlib>=3.8",
+    "seaborn>=0.13",
+    # GPU monitoring
+    "nvidia-ml-py>=12",
+    # Config & validation
+    "PyYAML>=6.0",
+    "pydantic>=2.6",
+    # CLI
+    "click>=8.1",
+    # PDF utilities
+    "PyMuPDF",
+    # HTTP for PMC download
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+gpu = [
+    # CUDA wheels — install only on RCP / machine with GPU
+    "mmore[cu126]",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "pytest-mock>=3.12",
+    "ruff>=0.6",
+    "pre-commit>=3.7",
+]
+
+[project.scripts]
+bcv-corpus = "benchmark_colvision.corpus.cli:main"
+bcv-queries = "benchmark_colvision.queries.cli:main"
+bcv-run = "benchmark_colvision.runners.cli:main"
+bcv-report = "benchmark_colvision.reporting.cli:main"
+
+[tool.uv.sources]
+mmore = { git = "https://github.com/Gsharpp/mmore.git", rev = "498560047e19ddb57ecc0fdb5b01f9f4ccd0d651" }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/benchmark_colvision"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "RUF", "SIM", "PL"]
+ignore = ["E501", "PLR0913"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["PLR2004", "S101"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::Warning"]
+addopts = "-ra --strict-markers"
+markers = [
+    "gpu: requires CUDA GPU",
+    "slow: takes more than 30 seconds",
+    "integration: end-to-end test against mmore CLI",
+]

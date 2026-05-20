@@ -71,3 +71,6 @@ logs/
 # Temporary
 tmp/
 *.tmp
+
+# Local tooling artefacts
+.claude/
