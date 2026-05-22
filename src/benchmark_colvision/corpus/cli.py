@@ -8,6 +8,7 @@ from pathlib import Path
 import click
 
 from benchmark_colvision.corpus.corpus_manifest import CorpusManifest, verify_manifest
+from benchmark_colvision.corpus.language_filter import detect_language
 from benchmark_colvision.corpus.visual_density_filter import compute_density, keep
 
 
@@ -47,3 +48,31 @@ def verify(manifest_path: Path, base_dir: Path) -> None:
     for d in drift:
         click.echo(f"  {d}")
     raise SystemExit(1)
+
+
+@main.command("detect-lang")
+@click.argument("pdf_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--max-chars", type=int, default=4000, show_default=True)
+def detect_lang(pdf_path: Path, max_chars: int) -> None:
+    """Extract first-page text via PyMuPDF and report detected language code."""
+    import fitz  # type: ignore[import-not-found]
+
+    doc = fitz.open(pdf_path)
+    try:
+        text = "".join(page.get_text() for page in doc[:2])[:max_chars]
+    finally:
+        doc.close()
+    lang = detect_language(text)
+    click.echo(json.dumps({"pdf_path": str(pdf_path), "language": lang}, indent=2))
+
+
+@main.command("download-pmc")
+@click.argument("pmcids", nargs=-1, required=True)
+@click.option("--cache-dir", type=click.Path(path_type=Path), required=True)
+@click.option("--out-dir", type=click.Path(path_type=Path), required=True)
+def download_pmc(pmcids: tuple[str, ...], cache_dir: Path, out_dir: Path) -> None:
+    """Download a set of PMC OA packages (idempotent) and extract their PDFs."""
+    from benchmark_colvision.corpus.pmc_downloader import download_corpus
+
+    pdfs = download_corpus(pmcids, cache_dir=cache_dir, pdf_out_dir=out_dir)
+    click.echo(f"extracted {len(pdfs)} PDFs to {out_dir}")

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import matplotlib
 from pathlib import Path
 
 import pytest
+
+matplotlib.use("Agg")
 
 
 @pytest.fixture
