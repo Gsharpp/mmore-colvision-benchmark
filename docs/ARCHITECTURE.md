@@ -26,17 +26,22 @@ a model, a language, or a metric.
 
 ```
 src/benchmark_colvision/
+├── clients/
+│   ├── vllm_client.py        VLLMClient: httpx → /v1/completions, retries
+│   └── ragas_llm.py          factory: LangChain ChatOpenAI → ragas wrapper
 ├── corpus/
 │   ├── corpus_manifest.py    schema: PdfEntry, CorpusManifest, SHA-256 verifier
 │   ├── visual_density_filter.py    PyMuPDF heuristic (figures/tables surface)
 │   ├── language_filter.py    langdetect wrapper, seeded for reproducibility
 │   ├── pmc_downloader.py     PMC OA index parser + tarball extractor
+│   ├── url_list_downloader.py    generic bulk PDF fetch from a JSON URL manifest
 │   └── cli.py                bcv-corpus
 ├── queries/
 │   ├── schema.py             SyntheticQuery, QuerySet, deterministic ids/hash
 │   ├── inverse_query_gen.py  LLMClient protocol, prompt, completion parser
 │   ├── ambiguity_filter.py   judge prompt + score parser + filter loop
 │   ├── methodology_validation.py  Pearson/Spearman vs annotated subset
+│   ├── pdf_pages.py          CorpusManifest → iterable of PageInput
 │   └── cli.py                bcv-queries
 ├── runners/
 │   ├── mmore_wrapper.py      subprocess CommandResult + MmoreRun aggregate
@@ -123,11 +128,24 @@ For Track B the flow is identical except (a) one orchestrator iterates over
 
 ### Plug a real LLM into queries
 
-`queries/inverse_query_gen.LLMClient` is a 1-method protocol. In `scripts/`
-write an adapter (e.g. `VLLMClient`) that satisfies it and hand it to
-`generate_for_pages`. The CLI subcommand `bcv-queries generate` is intentionally
-guarded with a `ClickException`: the wiring of the live judge is an operational
-choice the deployment script owns.
+`queries/inverse_query_gen.LLMClient` is a 1-method protocol implemented by
+`clients/vllm_client.VLLMClient`. `bcv-queries generate` and `bcv-queries
+filter` now accept `--vllm-endpoint` and `--vllm-model` directly — point them
+at the host:port printed by `scripts/slurm/serve_meditron.sbatch`.
+
+For the RAGAS judge (faithfulness, answer relevancy, context precision/recall),
+`clients/ragas_llm.make_ragas_judge()` returns a `LangchainLLMWrapper` wired to
+the same vLLM endpoint. Pass that wrapper as `llm_callable=` to
+`evaluation/generation_metrics.score_samples()`.
+
+## Running the vLLM service
+
+`scripts/slurm/serve_meditron.sbatch` launches a long-lived job that serves
+Meditron-70B via vLLM on 4 GPUs (`tensor_parallel_size=4`, `bfloat16`,
+`max_model_len=4096`). The job prints its hostname and the endpoint URL to its
+log — downstream jobs export it as `VLLM_ENDPOINT` and read it via
+`clients.ragas_llm.judge_from_env()` or pass it to `bcv-queries` via
+`--vllm-endpoint`.
 
 ## Reproducibility checklist
 

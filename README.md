@@ -69,17 +69,24 @@ Scaffolding complete:
 - GPU memory tracker, latency percentile summary.
 - Visual-density filter, corpus manifest with SHA-256 verification, language detector.
 - PMC-OA index parser and tarball extractor.
+- Generic URL-list downloader for any source whose article list can be exported
+  (HAL, Thieme OA, SciELO, CNKI, Saudi Med Journal).
 - Synthetic query pipeline: inverse-query prompt, ambiguity filter, methodology-validation correlator.
+- vLLM client (`benchmark_colvision.clients.vllm_client`) wired into
+  `bcv-queries generate` / `bcv-queries filter`.
+- RAGAS judge bridge (`benchmark_colvision.clients.ragas_llm`) over the same vLLM endpoint.
 - Track A and Track B cell orchestrators, mmore retrieve-output parser.
 - Result schema (MTEB-compatible) and aggregator (per-cell bootstrap CI, pairwise Wilcoxon).
 - Reporting: Track A scaling/latency/throughput/GPU-memory figures, Track B heatmap and language-gap, LaTeX tables with CIs.
 - Config templates for the five models, both tracks, and the Meditron-based judge.
-- SLURM job arrays for Track A and Track B on RCP.
+- SLURM job arrays for Track A and Track B on RCP, plus a long-lived
+  `serve_meditron.sbatch` for the vLLM judge/query-generator.
 - `docs/ARCHITECTURE.md` and a `report/main.tex` skeleton.
 
-Pending:
-- Wire a vLLM client adapter for `bcv-queries generate` / `bcv-queries filter`.
-- Per-language source downloaders beyond PMC-OA (HAL, Thieme, SciELO, CNKI, Saudi Med).
-- Methodology validation run against an annotated reference subset.
-- End-to-end smoke run on RCP and full benchmark execution.
+Pending (RCP-side):
+- Source-specific URL discovery scripts (HAL OAI export, Thieme listing, SciELO
+  search, CNKI OA, Saudi Med Journal index) producing the JSON manifests that
+  feed `bcv-corpus download-urls`.
+- Methodology validation run (Phase 4) against an annotated ViDoRe healthcare subset.
+- End-to-end smoke run on RCP, then full Track A + Track B execution via SLURM.
 - Filling in figures, tables, and prose for the LaTeX technical report.
