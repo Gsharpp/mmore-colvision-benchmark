@@ -7,7 +7,12 @@ from pathlib import Path
 
 import click
 
+from benchmark_colvision.clients.vllm_client import VLLMClient, VLLMSamplingDefaults
+from benchmark_colvision.corpus.corpus_manifest import CorpusManifest
+from benchmark_colvision.queries.ambiguity_filter import filter_queries
+from benchmark_colvision.queries.inverse_query_gen import generate_for_pages
 from benchmark_colvision.queries.methodology_validation import correlate
+from benchmark_colvision.queries.pdf_pages import iter_manifest_pages, page_text_index
 from benchmark_colvision.queries.schema import QuerySet
 
 
@@ -18,30 +23,88 @@ def main() -> None:
 
 @main.command("generate")
 @click.option("--corpus-manifest", type=click.Path(exists=True, path_type=Path), required=True)
+@click.option("--corpus-root", type=click.Path(exists=True, path_type=Path), required=True)
 @click.option("--out", type=click.Path(path_type=Path), required=True)
+@click.option("--vllm-endpoint", required=True, help="Base URL of the vLLM server (e.g. http://node:8000)")
+@click.option("--vllm-model", required=True, help="Model name as registered on the vLLM server")
 @click.option("--n-per-page", type=int, default=2, show_default=True)
-def generate(corpus_manifest: Path, out: Path, n_per_page: int) -> None:
-    """Generate inverse queries via Meditron-70B (vLLM client wired up externally).
+@click.option("--max-pages", type=int, default=None, help="Cap for smoke tests")
+@click.option("--temperature", type=float, default=0.7, show_default=True)
+@click.option("--max-tokens", type=int, default=512, show_default=True)
+@click.option("--name", default=None, help="QuerySet name (defaults to manifest name)")
+def generate(
+    corpus_manifest: Path,
+    corpus_root: Path,
+    out: Path,
+    vllm_endpoint: str,
+    vllm_model: str,
+    n_per_page: int,
+    max_pages: int | None,
+    temperature: float,
+    max_tokens: int,
+    name: str | None,
+) -> None:
+    """Generate inverse queries by walking the corpus manifest and calling vLLM."""
+    manifest = CorpusManifest.load(corpus_manifest)
+    pages_iter = iter_manifest_pages(manifest, corpus_root)
+    if max_pages is not None:
+        pages_iter = (p for i, p in enumerate(pages_iter) if i < max_pages)
 
-    The actual LLM connection is wired by `scripts/generate_queries.sh` which
-    binds an `LLMClient` adapter — this command only orchestrates the corpus
-    walk and writes the JSONL output.
-    """
-    raise click.ClickException(
-        "Wire a vLLM client adapter before running this command "
-        "(see src/benchmark_colvision/queries/inverse_query_gen.py:LLMClient)"
-    )
+    defaults = VLLMSamplingDefaults(temperature=temperature, max_tokens=max_tokens)
+    with VLLMClient(endpoint=vllm_endpoint, model=vllm_model, defaults=defaults) as llm:
+        queries = generate_for_pages(pages_iter, llm, n_per_page=n_per_page)
+
+    language = manifest.languages[0] if len(manifest.languages) == 1 else "mixed"
+    qs = QuerySet(name=name or manifest.name, language=language, queries=queries)
+    qs.save_jsonl(out)
+    click.echo(json.dumps({"out": str(out), "n_queries": len(queries), "sha256": qs.sha256()}))
 
 
 @main.command("filter")
 @click.option("--in-jsonl", type=click.Path(exists=True, path_type=Path), required=True)
 @click.option("--out-jsonl", type=click.Path(path_type=Path), required=True)
+@click.option("--corpus-manifest", type=click.Path(exists=True, path_type=Path), required=True)
+@click.option("--corpus-root", type=click.Path(exists=True, path_type=Path), required=True)
+@click.option("--vllm-endpoint", required=True)
+@click.option("--vllm-model", required=True)
 @click.option("--threshold", type=float, default=0.8, show_default=True)
-def filter_(in_jsonl: Path, out_jsonl: Path, threshold: float) -> None:
-    """Ambiguity filter — requires a configured judge client (see scripts/)."""
-    raise click.ClickException(
-        "Wire a judge client adapter before running this command "
-        "(see src/benchmark_colvision/queries/ambiguity_filter.py:filter_queries)"
+@click.option("--temperature", type=float, default=0.0, show_default=True)
+@click.option("--max-tokens", type=int, default=16, show_default=True)
+def filter_(
+    in_jsonl: Path,
+    out_jsonl: Path,
+    corpus_manifest: Path,
+    corpus_root: Path,
+    vllm_endpoint: str,
+    vllm_model: str,
+    threshold: float,
+    temperature: float,
+    max_tokens: int,
+) -> None:
+    """Score each query with the judge and drop those below threshold."""
+    qs = QuerySet.load_jsonl(in_jsonl, name=in_jsonl.stem, language="unknown")
+    manifest = CorpusManifest.load(corpus_manifest)
+    needed = {f"{q.source_pdf}#page={q.source_page}" for q in qs.queries}
+    text_for = page_text_index(manifest, corpus_root, needed_ids=needed)
+
+    defaults = VLLMSamplingDefaults(temperature=temperature, max_tokens=max_tokens)
+    with VLLMClient(endpoint=vllm_endpoint, model=vllm_model, defaults=defaults) as llm:
+        kept, report = filter_queries(qs.queries, text_for, llm, threshold=threshold)
+
+    out_qs = QuerySet(name=qs.name, language=qs.language, queries=kept)
+    out_qs.save_jsonl(out_jsonl)
+    click.echo(
+        json.dumps(
+            {
+                "out": str(out_jsonl),
+                "n_in": report.n_in,
+                "n_kept": report.n_kept,
+                "n_dropped": report.n_dropped,
+                "mean_score": round(report.mean_score, 4),
+                "threshold": report.threshold,
+                "sha256": out_qs.sha256(),
+            }
+        )
     )
 
 
