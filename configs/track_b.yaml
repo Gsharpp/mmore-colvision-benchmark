@@ -41,3 +41,16 @@ retrieval:
   top_k: 10
 
 seeds: [0, 1, 2]
+
+# Filesystem layout used by bcv-run track-b. Per-language paths are derived
+# as {queries_dir}/{lang}.jsonl, {mmore_output_dir}/{model_id}/{lang}/ and
+# the record JSONs go to
+# {records_dir}/{model_id}/{lang}/seed_{seed}.json.
+paths:
+  corpus_manifest: data/track_b/corpus_manifest.json
+  queries_dir: data/track_b/queries
+  mmore_process_config: configs/mmore/process.yaml
+  mmore_index_config: configs/mmore/index.yaml
+  mmore_retrieve_config: configs/mmore/retrieve.yaml
+  mmore_output_dir: data/track_b/retrieve
+  records_dir: results/track_b

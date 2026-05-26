@@ -7,13 +7,14 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=12:00:00
-#SBATCH --array=0-14    # 5 models x 3 seeds = 15 jobs; per-palier loop inside
+#SBATCH --array=0-14    # 5 models x 3 seeds = 15 jobs; per-palier loop inside bcv-run
 
 set -euo pipefail
 
 # Activate the uv-managed venv prepared on the shared filesystem.
 source "$HOME/mmore-colvision-benchmark/.venv/bin/activate"
 cd "$HOME/mmore-colvision-benchmark"
+mkdir -p logs
 
 MODELS=(colpali_v1_3 colqwen2_v1_0 colqwen2_5_v0_2 colqwen3_v0_1 colgemma3_colnetra)
 SEEDS=(0 1 2)
@@ -24,11 +25,15 @@ seed_idx=$((idx % 3))
 MODEL="${MODELS[$model_idx]}"
 SEED="${SEEDS[$seed_idx]}"
 
-echo "Track A — model=${MODEL} seed=${SEED}"
+# Pin the mmore commit from pyproject so the BenchmarkRecord carries it. The
+# value is the rev= field in [tool.uv.sources] mmore.
+MMORE_COMMIT=$(python -c "import tomllib; d=tomllib.loads(open('pyproject.toml','rb').read().decode()); print(d['tool']['uv']['sources']['mmore']['rev'])")
+
+echo "Track A — model=${MODEL} seed=${SEED} mmore=${MMORE_COMMIT}"
 
 bcv-run track-a \
   --model-id "${MODEL}" \
   --seed "${SEED}" \
   --config configs/track_a.yaml \
   --models configs/models.yaml \
-  --output "results/track_a/${MODEL}/seed_${SEED}/"
+  --mmore-commit "${MMORE_COMMIT}"

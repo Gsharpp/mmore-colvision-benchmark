@@ -29,3 +29,17 @@ retrieval:
   top_k: 10
 
 seeds: [0, 1, 2]
+
+# Filesystem layout used by bcv-run track-a. All paths are relative to the
+# repo root unless absolute. The runner derives per-palier paths from
+# {queries_dir}/{palier_id}.jsonl, {mmore_output_dir}/{model_id}/{palier_id}/
+# and writes one BenchmarkRecord JSON to
+# {records_dir}/{model_id}/{palier_id}/seed_{seed}.json.
+paths:
+  corpus_manifest: data/track_a/corpus_manifest.json
+  queries_dir: data/track_a/queries
+  mmore_process_config: configs/mmore/process.yaml
+  mmore_index_config: configs/mmore/index.yaml
+  mmore_retrieve_config: configs/mmore/retrieve.yaml
+  mmore_output_dir: data/track_a/retrieve
+  records_dir: results/track_a

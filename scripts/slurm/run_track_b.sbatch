@@ -13,6 +13,7 @@ set -euo pipefail
 
 source "$HOME/mmore-colvision-benchmark/.venv/bin/activate"
 cd "$HOME/mmore-colvision-benchmark"
+mkdir -p logs
 
 MODELS=(colpali_v1_3 colqwen2_v1_0 colqwen2_5_v0_2 colqwen3_v0_1 colgemma3_colnetra)
 LANGS=(en fr de es zh ar)
@@ -27,7 +28,9 @@ MODEL="${MODELS[$model_idx]}"
 LANG="${LANGS[$lang_idx]}"
 SEED="${SEEDS[$seed_idx]}"
 
-echo "Track B — model=${MODEL} lang=${LANG} seed=${SEED}"
+MMORE_COMMIT=$(python -c "import tomllib; d=tomllib.loads(open('pyproject.toml','rb').read().decode()); print(d['tool']['uv']['sources']['mmore']['rev'])")
+
+echo "Track B — model=${MODEL} lang=${LANG} seed=${SEED} mmore=${MMORE_COMMIT}"
 
 bcv-run track-b \
   --model-id "${MODEL}" \
@@ -35,4 +38,4 @@ bcv-run track-b \
   --seed "${SEED}" \
   --config configs/track_b.yaml \
   --models configs/models.yaml \
-  --output "results/track_b/${MODEL}/${LANG}/seed_${SEED}/"
+  --mmore-commit "${MMORE_COMMIT}"
