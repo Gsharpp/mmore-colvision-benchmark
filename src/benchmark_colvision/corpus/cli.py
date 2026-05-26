@@ -78,6 +78,65 @@ def download_pmc(pmcids: tuple[str, ...], cache_dir: Path, out_dir: Path) -> Non
     click.echo(f"extracted {len(pdfs)} PDFs to {out_dir}")
 
 
+@main.command("build-manifest")
+@click.argument("pdf_root", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option("--out", type=click.Path(path_type=Path), required=True, help="Manifest JSON output path")
+@click.option("--name", required=True, help="Manifest name (e.g. 'track_a_medium')")
+@click.option("--track", required=True, type=click.Choice(["A", "B"]))
+@click.option("--source", required=True, type=click.Choice(
+    ["pmc-oa", "hal", "cairn", "scielo", "thieme-oa", "saudi-med", "cnki-oa", "other"]
+))
+@click.option("--density-threshold", type=float, default=0.30, show_default=True)
+@click.option("--language-override", default=None, help="Skip language detection and use this code")
+@click.option("--report-out", type=click.Path(path_type=Path), default=None,
+              help="Optional skipped-PDFs report JSON")
+def build_manifest_cmd(
+    pdf_root: Path,
+    out: Path,
+    name: str,
+    track: str,
+    source: str,
+    density_threshold: float,
+    language_override: str | None,
+    report_out: Path | None,
+) -> None:
+    """Walk PDF_ROOT, score each PDF, and write a CorpusManifest JSON."""
+    from benchmark_colvision.corpus.build_manifest import build_manifest
+
+    manifest, report = build_manifest(
+        pdf_root,
+        name=name,
+        track=track,
+        source=source,
+        density_threshold=density_threshold,
+        language_override=language_override,
+    )
+    manifest.save(out)
+    click.echo(
+        json.dumps(
+            {
+                "out": str(out),
+                "n_kept": len(manifest.pdfs),
+                "n_skipped": len(report.skipped),
+                "languages": manifest.languages,
+                "total_pages": manifest.total_pages,
+            },
+            indent=2,
+        )
+    )
+    if report_out is not None:
+        report_out.parent.mkdir(parents=True, exist_ok=True)
+        report_out.write_text(
+            json.dumps(
+                {
+                    "n_kept": len(manifest.pdfs),
+                    "skipped": [{"pdf_path": s.pdf_path, "reason": s.reason} for s in report.skipped],
+                },
+                indent=2,
+            )
+        )
+
+
 @main.command("download-urls")
 @click.argument("manifest_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option("--out-dir", type=click.Path(path_type=Path), required=True)
