@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from pathlib import Path
 from typing import Literal
 
@@ -36,7 +35,7 @@ class CorpusManifest(BaseModel):
         path.write_text(self.to_json())
 
     @classmethod
-    def load(cls, path: Path) -> "CorpusManifest":
+    def load(cls, path: Path) -> CorpusManifest:
         return cls.model_validate_json(path.read_text())
 
 

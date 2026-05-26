@@ -48,7 +48,7 @@ class VLLMClient:
         if self._owns_client:
             self._client.close()
 
-    def __enter__(self) -> "VLLMClient":
+    def __enter__(self) -> VLLMClient:
         return self
 
     def __exit__(self, *_: object) -> None:
@@ -82,7 +82,7 @@ class VLLMClient:
                 last_exc = exc
                 self._sleep_backoff(attempt)
                 continue
-            if 500 <= resp.status_code < 600:
+            if 500 <= resp.status_code < 600:  # noqa: PLR2004 — HTTP 5xx range
                 last_exc = httpx.HTTPStatusError(
                     f"vLLM returned {resp.status_code}", request=resp.request, response=resp
                 )

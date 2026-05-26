@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Iterator
 
 
 @dataclass
@@ -61,7 +61,7 @@ class GPUMemoryTracker:
         self._handle = None
         self._pynvml = None
 
-    def __enter__(self) -> "GPUMemoryTracker":
+    def __enter__(self) -> GPUMemoryTracker:
         import pynvml  # type: ignore[import-not-found]
 
         self._pynvml = pynvml
@@ -112,7 +112,7 @@ class LatencySummary:
     max_ms: float
 
     @classmethod
-    def from_seconds(cls, durations_s: list[float]) -> "LatencySummary":
+    def from_seconds(cls, durations_s: list[float]) -> LatencySummary:
         ms = [d * 1000 for d in durations_s]
         if not ms:
             return cls(0, float("nan"), float("nan"), float("nan"), float("nan"), float("nan"), float("nan"))

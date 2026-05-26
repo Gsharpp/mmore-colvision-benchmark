@@ -29,7 +29,6 @@ from pydantic import BaseModel, Field
 
 from benchmark_colvision.corpus.corpus_manifest import sha256_file
 
-
 SourceLiteral = Literal[
     "pmc-oa", "hal", "cairn", "scielo", "thieme-oa", "saudi-med", "cnki-oa", "other"
 ]
@@ -47,7 +46,7 @@ class UrlListManifest(BaseModel):
     items: list[UrlListItem] = Field(default_factory=list)
 
     @classmethod
-    def load(cls, path: Path) -> "UrlListManifest":
+    def load(cls, path: Path) -> UrlListManifest:
         return cls.model_validate_json(path.read_text())
 
 

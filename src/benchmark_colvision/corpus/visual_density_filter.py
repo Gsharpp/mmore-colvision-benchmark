@@ -48,7 +48,7 @@ def compute_density(pdf_path: Path) -> DensityReport:
                 tables = page.find_tables()
                 for t in tables:
                     table_area += _bbox_area(t.bbox)
-            except Exception:  # noqa: BLE001 — PyMuPDF table extraction can raise
+            except Exception:
                 pass
     if total_area == 0:
         return DensityReport(str(pdf_path), page_count, 0.0, 0.0)

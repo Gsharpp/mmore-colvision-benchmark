@@ -9,6 +9,7 @@ iterates over paliers (Track~A) or languages (Track~B), and writes one
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -77,8 +78,6 @@ def _lookup_model(models_cfg: dict[str, Any], model_id: str) -> dict[str, Any]:
 
 def _manifest_sha256(manifest_path: Path) -> str:
     """SHA-256 of the manifest JSON itself (cheap; manifest already contains per-PDF hashes)."""
-    import hashlib
-
     return hashlib.sha256(manifest_path.read_bytes()).hexdigest()
 
 
@@ -167,7 +166,7 @@ def run_track_b_for_model(
     hf_name = model_entry["hf_name"]
 
     languages = track_cfg.get("languages", [])
-    lang_entry = next((l for l in languages if l.get("code") == language), None)
+    lang_entry = next((entry for entry in languages if entry.get("code") == language), None)
     if lang_entry is None:
         raise KeyError(f"language {language!r} not declared in track_b.yaml")
     n_pages = int(lang_entry.get("pages_target", 0)) or int(

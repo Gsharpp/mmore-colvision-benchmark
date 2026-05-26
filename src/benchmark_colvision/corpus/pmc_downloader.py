@@ -17,11 +17,9 @@ import time
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 from xml.etree import ElementTree as ET
 
 import httpx
-
 
 PMC_OA_INDEX_URL = "https://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_package/oa_file_list.csv"
 PMC_OA_PACKAGE_BASE = "https://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_package/"
@@ -40,7 +38,7 @@ class PmcPackage:
 
 def iter_package_index(
     raw_csv: str,
-    pmcid_filter: Optional[set[str]] = None,
+    pmcid_filter: set[str] | None = None,
 ) -> Iterator[PmcPackage]:
     """Parse the oa_file_list.csv format and yield packages.
 

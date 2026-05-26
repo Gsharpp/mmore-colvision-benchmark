@@ -9,6 +9,7 @@ module.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 
@@ -29,14 +30,14 @@ def make_ragas_judge(cfg: JudgeConfig):
     is not installed in the environment.
     """
     try:
-        from langchain_openai import ChatOpenAI  # type: ignore[import-not-found]
+        from langchain_openai import ChatOpenAI  # type: ignore[import-not-found]  # noqa: PLC0415
     except ImportError as e:  # pragma: no cover - tested via monkeypatch
         raise ImportError(
             "langchain_openai is required for the RAGAS judge bridge — "
             "install it on RCP with `uv pip install langchain-openai`"
         ) from e
     try:
-        from ragas.llms.base import LangchainLLMWrapper  # type: ignore[import-not-found]
+        from ragas.llms.base import LangchainLLMWrapper  # type: ignore[import-not-found]  # noqa: PLC0415, I001
     except ImportError as e:  # pragma: no cover - tested via monkeypatch
         raise ImportError(
             "ragas is required for the judge bridge — "
@@ -54,10 +55,8 @@ def make_ragas_judge(cfg: JudgeConfig):
     return LangchainLLMWrapper(chat)
 
 
-def judge_from_env(model: str, endpoint_env: str = "VLLM_ENDPOINT") -> "object":
+def judge_from_env(model: str, endpoint_env: str = "VLLM_ENDPOINT") -> object:
     """Convenience: read the vLLM endpoint from an env var, return the judge."""
-    import os
-
     endpoint = os.environ.get(endpoint_env)
     if not endpoint:
         raise RuntimeError(

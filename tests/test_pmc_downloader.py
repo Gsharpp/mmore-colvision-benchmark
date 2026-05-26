@@ -18,7 +18,6 @@ from benchmark_colvision.corpus.pmc_downloader import (
     parse_mesh_terms_from_nxml,
 )
 
-
 SAMPLE_CSV = """File,Article Citation,Accession ID,Last Updated,PMID,License
 oa_package/00/01/PMC1234567.tar.gz,J Foo. 2020 1(1):1-2.,PMC1234567,2020-01-01,1111,CC-BY
 oa_package/00/02/PMC2345678.tar.gz,J Bar. 2020 1(1):3-4.,PMC2345678,2020-01-01,2222,CC-BY-NC

@@ -6,9 +6,6 @@ code (e.g. "en") or `None` when detection fails or is below a confidence floor.
 
 from __future__ import annotations
 
-from typing import Optional
-
-
 # `langdetect`'s detector is stochastic by default; we seed it on first import
 # so that the same input always produces the same output.
 _SEEDED = False
@@ -27,14 +24,16 @@ def _seed_langdetect() -> None:
     _SEEDED = True
 
 
-def detect_language(text: str, min_chars: int = 80) -> Optional[str]:
+def detect_language(text: str, min_chars: int = 80) -> str | None:
     """Return ISO 639-1 code of `text`, or None if undetectable or too short."""
     if not text or len(text) < min_chars:
         return None
     _seed_langdetect()
     try:
         from langdetect import detect  # type: ignore[import-not-found]
-        from langdetect.lang_detect_exception import LangDetectException  # type: ignore[import-not-found]
+        from langdetect.lang_detect_exception import (
+            LangDetectException,  # type: ignore[import-not-found]
+        )
     except ImportError:
         return None
     try:

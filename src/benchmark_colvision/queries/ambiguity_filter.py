@@ -13,7 +13,6 @@ from dataclasses import dataclass
 from benchmark_colvision.queries.inverse_query_gen import LLMClient
 from benchmark_colvision.queries.schema import SyntheticQuery
 
-
 AMBIGUITY_PROMPT = """Tu es un évaluateur. Voici une question médicale et la page
 source qui a servi à la générer.
 

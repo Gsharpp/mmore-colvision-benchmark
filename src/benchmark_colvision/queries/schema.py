@@ -38,7 +38,7 @@ class QuerySet(BaseModel):
         path.write_text(self.to_jsonl())
 
     @classmethod
-    def load_jsonl(cls, path: Path, name: str, language: str) -> "QuerySet":
+    def load_jsonl(cls, path: Path, name: str, language: str) -> QuerySet:
         queries = [
             SyntheticQuery.model_validate_json(line)
             for line in path.read_text().splitlines()

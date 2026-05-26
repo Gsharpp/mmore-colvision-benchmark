@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import matplotlib
 from pathlib import Path
 
+import matplotlib
 import pytest
 
 matplotlib.use("Agg")

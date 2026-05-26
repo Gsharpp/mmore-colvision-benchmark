@@ -34,7 +34,7 @@ def iter_pdf_pages(
             try:
                 tables = page.find_tables()
                 has_tables = len(list(tables)) > 0
-            except Exception:  # noqa: BLE001 — PyMuPDF table extraction can raise
+            except Exception:
                 has_tables = False
             yield PageInput(
                 pdf_path=pdf_rel_path,

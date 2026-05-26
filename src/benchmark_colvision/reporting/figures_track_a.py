@@ -9,7 +9,6 @@ import pandas as pd
 
 from benchmark_colvision.results.aggregate import per_cell_ci
 
-
 PALIER_ORDER = ["tiny", "small", "medium", "large"]
 PALIER_PAGES = {"tiny": 100, "small": 1000, "medium": 10000, "large": 50000}
 

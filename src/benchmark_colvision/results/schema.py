@@ -9,7 +9,7 @@ manifest hash, query set hash, seed, hardware).
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -83,7 +83,7 @@ class BenchmarkRecord(BaseModel):
     benchmark_version: str
     corpus_manifest_sha256: str
     queries_sha256: str
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
     retrieval: RetrievalScores = Field(default_factory=RetrievalScores)
     generation: GenerationScores = Field(default_factory=GenerationScores)
     performance: PerformanceScores = Field(default_factory=PerformanceScores)

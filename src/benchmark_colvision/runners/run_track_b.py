@@ -9,7 +9,6 @@ from benchmark_colvision.queries.schema import QuerySet
 from benchmark_colvision.results.schema import (
     BenchmarkRecord,
     CellId,
-    PerformanceScores,
     RetrievalScores,
 )
 from benchmark_colvision.runners.mmore_wrapper import run_pipeline

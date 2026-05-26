@@ -13,7 +13,6 @@ from benchmark_colvision.corpus.url_list_downloader import (
     download_one,
 )
 
-
 PDF_MAGIC = b"%PDF-1.4\n%fake content"
 
 

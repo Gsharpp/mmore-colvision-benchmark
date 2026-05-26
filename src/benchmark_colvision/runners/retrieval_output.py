@@ -16,7 +16,6 @@ import json
 from collections.abc import Sequence
 from pathlib import Path
 
-
 _DOC_KEYS = ("document_id", "doc_id", "page_id", "page", "id")
 
 

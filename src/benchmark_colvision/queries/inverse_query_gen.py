@@ -16,7 +16,6 @@ from typing import Protocol
 
 from benchmark_colvision.queries.schema import SyntheticQuery, query_id_for
 
-
 PROMPT_TEMPLATE = """Tu es un expert médical. Voici une page d'article médical.
 Texte extrait :
 ---
