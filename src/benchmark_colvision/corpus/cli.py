@@ -76,3 +76,54 @@ def download_pmc(pmcids: tuple[str, ...], cache_dir: Path, out_dir: Path) -> Non
 
     pdfs = download_corpus(pmcids, cache_dir=cache_dir, pdf_out_dir=out_dir)
     click.echo(f"extracted {len(pdfs)} PDFs to {out_dir}")
+
+
+@main.command("download-urls")
+@click.argument("manifest_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--out-dir", type=click.Path(path_type=Path), required=True)
+@click.option("--report-out", type=click.Path(path_type=Path), default=None)
+@click.option("--max-retries", type=int, default=3, show_default=True)
+def download_urls(
+    manifest_path: Path,
+    out_dir: Path,
+    report_out: Path | None,
+    max_retries: int,
+) -> None:
+    """Bulk-download PDFs listed in a UrlListManifest (HAL, Thieme, SciELO, ...)."""
+    from benchmark_colvision.corpus.url_list_downloader import (
+        UrlListManifest,
+        download_from_manifest,
+    )
+
+    manifest = UrlListManifest.load(manifest_path)
+    report = download_from_manifest(manifest, out_dir, max_retries=max_retries)
+    summary = {
+        "source": report.source,
+        "language": report.language,
+        "n_total": report.n_total,
+        "n_downloaded": report.n_downloaded,
+        "n_cached": report.n_cached,
+        "n_failed": report.n_failed,
+    }
+    click.echo(json.dumps(summary, indent=2))
+    if report_out is not None:
+        report_out.parent.mkdir(parents=True, exist_ok=True)
+        report_out.write_text(
+            json.dumps(
+                {
+                    **summary,
+                    "outcomes": [
+                        {
+                            "source_id": o.source_id,
+                            "url": o.url,
+                            "status": o.status,
+                            "pdf_path": str(o.pdf_path) if o.pdf_path else None,
+                            "sha256": o.sha256,
+                            "error": o.error,
+                        }
+                        for o in report.outcomes
+                    ],
+                },
+                indent=2,
+            )
+        )
