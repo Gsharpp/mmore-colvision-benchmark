@@ -9,6 +9,7 @@
 \usepackage{booktabs}
 \usepackage{multirow}
 \usepackage{amsmath, amssymb}
+\usepackage[round]{natbib}
 \usepackage{hyperref}
 \usepackage{cleveref}
 \usepackage{xcolor}
@@ -45,57 +46,272 @@ corpus manifest with per-PDF SHA-256, and the synthetic query sets.
 \end{abstract}
 
 \section{Introduction}
-% Why a fixed-pipeline cross-model evaluation? Gap left by ViDoRe / MMEB.
+
+Vision-language retrieval over document collections has shifted, in less than
+two years, from a research curiosity to a production primitive. The ColVision
+line of work --- starting with ColPali~\cite{faysse2024colpali} and continued
+by ColQwen2, ColQwen2.5, ColQwen3 and ColGemma3 variants --- has demonstrated
+that multi-vector page-level embeddings, combined with late-interaction
+reranking inherited from ColBERT~\cite{khattab2020colbert}, can outperform
+text-only OCR$\rightarrow$BM25 pipelines on figure-rich corpora. Yet the
+public evaluation surface for these encoders is fragmented. Each model is
+released with its own \textsc{ViDoRe}~\cite{faysse2024vidore} scores, computed
+on the authors' own software stack, often against subtly different versions
+of the benchmark. \textsc{MMEB}~\cite{wei2025mmeb} reduces some of this
+variance for general multimodal embedding tasks, but does not target document
+retrieval and assumes a flat single-vector contract incompatible with
+late-interaction encoders.
+
+The result is that practitioners considering ColVision for a real-world
+retrieval-augmented-generation (RAG) deployment cannot read off, from
+published numbers, which encoder best suits their corpus and constraints.
+Three questions are answered nowhere in the public literature:
+
+\begin{enumerate}
+  \item \textbf{Cross-model parity.} How do the five ColVision models compare
+    when the index, the reranker, the embedding loader and the retrieval
+    contract are all held strictly constant?
+  \item \textbf{Scaling.} How does each model's retrieval quality, latency
+    and memory degrade as the index grows from a few hundred to tens of
+    thousands of pages --- the regime an actual hospital or pharmaceutical
+    knowledge base operates in?
+  \item \textbf{Multilingual robustness.} How much do the models generalise
+    across scripts unrelated to their pre-training distribution, including
+    logographic (Simplified Chinese) and RTL connected scripts (Arabic)?
+\end{enumerate}
+
+We address all three by building a fixed-pipeline benchmark on top of the
+\textsc{mmore} project~\cite{mmore2024} (PR \#305), which integrates the five
+encoders behind a single CLI. We invoke the \textsc{mmore} CLI as a
+subprocess rather than re-implementing its pipeline: every measurement we
+report reflects the exact code path a real \textsc{mmore} user would
+exercise. The benchmark code, configuration manifests with per-PDF SHA-256,
+synthetic query sets and result records (in an
+\textsc{MTEB}-compatible~\cite{muennighoff2023mteb} JSON schema) are
+released alongside this report.
 
 \section{Related work}
-% ViDoRe, MMEB, ColPali line of work, RAGAS, MTEB.
+
+\paragraph{Visual document retrieval.} ColPali~\cite{faysse2024colpali}
+introduced page-level multi-vector retrieval over rendered PDF images, using
+PaliGemma as the visual encoder and a ColBERT-style late-interaction scorer.
+Subsequent ColQwen2/2.5/3 variants swap the encoder for the Qwen-VL
+series~\cite{bai2023qwenvl}, generally trading throughput for quality.
+ColGemma3 variants (e.g.~\textit{ColNetraEmbed}) target multilingual
+performance through the Gemma-3 backbone~\cite{team2024gemma3}. All four
+families are evaluated by their authors on
+\textsc{ViDoRe}~\cite{faysse2024vidore} and its v2
+extension~\cite{faysse2025vidorev2}, but typically with different software
+stacks, different reranker implementations, and different batch-size /
+precision configurations, making cross-paper comparison unreliable.
+
+\paragraph{Multimodal embedding benchmarks.}
+\textsc{MMEB}~\cite{wei2025mmeb} standardises the multimodal embedding
+evaluation surface across 36 datasets, but operates on single-vector
+embeddings and on tasks (classification, VQA, grounding) that do not require
+page-level multi-vector retrieval. \textsc{MTEB}~\cite{muennighoff2023mteb}
+plays the same role for text and provides the result-format conventions we
+adopt for this work; ColVision models fall outside its scope.
+
+\paragraph{RAG generation metrics.}
+\textsc{RAGAS}~\cite{es2023ragas} proposes LLM-as-judge metrics for
+retrieval-augmented generation --- faithfulness, answer relevancy, context
+precision and context recall --- which we adopt unchanged. We deliberately
+use a single judge (Meditron-70B~\cite{chen2023meditron}) and call out the
+inter-judge-agreement gap as a limitation rather than averaging across judges.
+
+\paragraph{Synthetic query generation.} The idea of asking a strong LLM to
+author the queries a page would uniquely answer dates back to the
+\textsc{InPars}~\cite{bonifacio2022inpars} and \textsc{Promptagator}
+~\cite{dai2022promptagator} lines of work in text retrieval. We follow the
+same principle in the document-image setting, prompt Meditron-70B with the
+page's extracted text plus visual hints, and add a second-pass ambiguity
+filter modelled on the same judge. The methodology is validated (Phase 4)
+against an annotated subset of \textsc{ViDoRe} healthcare.
 
 \section{Methodology}
+
 \subsection{Pipeline under test}
-% Concise description of mmore PR #305: PDF → PNG (PyMuPDF dpi=200) →
-% ColVision multi-vector embeddings → Parquet → Milvus (FLAT, IP) → MaxSim
-% reranking ThreadPool → LangChain Retriever.
+
+\textsc{mmore} PR \#305 wires the ColVision encoders into a single ingest /
+retrieve pipeline. Each PDF page is rendered to a 200-dpi PNG via
+\textsc{PyMuPDF}~\cite{pymupdf}, then encoded by the chosen ColVision model
+into a multi-vector (token-level) embedding tensor. Embeddings are
+serialised to Parquet and inserted into a Milvus~\cite{wang2021milvus}
+collection (\textsc{FLAT} index, inner-product metric) keyed by the page
+identifier. Retrieval issues an embedding-only top-$k$ over Milvus, then
+re-ranks the candidates with a ColBERT-style MaxSim score~\cite{khattab2020colbert}
+computed in a CPU thread pool. The resulting ranked list is returned to the
+caller through a LangChain \textit{Retriever} contract; the generation step,
+when used, feeds the top-$k$ pages to a separate generator LLM.
+
+We hold every component of this pipeline constant across models. The only
+variables are (a)~the ColVision encoder, (b)~the corpus, and (c)~the random
+seed. The Milvus collection name is derived from the model identifier so
+that different embedding dimensions do not collide.
 
 \subsection{Models}
-% Table: model id, HF name, family, embed dim, batch size, dtype.
+
+The five encoders under evaluation are listed in Table~\ref{tab:models}.
+Embedding dimensions differ across families (128 for the ColPali/ColQwen
+line, 320 for ColQwen3, 768 for the ColGemma3 variant), which the pipeline
+absorbs by giving each model its own Milvus collection. The batch sizes and
+precision are taken from each model's published recommendation; we never
+re-tune them.
+
+\begin{table}[h]
+  \centering
+  \caption{ColVision encoders evaluated in this work.}
+  \label{tab:models}
+  \begin{tabular}{lllrll}
+    \toprule
+    Id & Family & HuggingFace name & Dim & Batch & Dtype \\
+    \midrule
+    \texttt{colpali\_v1\_3}        & ColPali   & \texttt{vidore/colpali-v1.3}        & 128 & 4 & bf16 \\
+    \texttt{colqwen2\_v1\_0}       & ColQwen2  & \texttt{vidore/colqwen2-v1.0}       & 128 & 4 & bf16 \\
+    \texttt{colqwen2\_5\_v0\_2}    & ColQwen2.5& \texttt{vidore/colqwen2.5-v0.2}     & 128 & 4 & bf16 \\
+    \texttt{colqwen3\_v0\_1}       & ColQwen3  & \texttt{vidore/colqwen3-v0.1}       & 320 & 2 & bf16 \\
+    \texttt{colgemma3\_colnetra}   & ColGemma3 & \texttt{Cognitive-Lab/ColNetraEmbed}& 768 & 2 & bf16 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
 \subsection{Corpora}
-% Track A: PMC-OA EN, visual density >= 30%, 4 paliers.
-% Track B: 6 languages, ~1.5k pages each, sources per language.
+
+\paragraph{Track A (English scaling).} We assemble a figure-rich English
+medical corpus from PubMed Central Open Access~\cite{pmcoa}. Articles are
+filtered by visual density: for each PDF we compute the fraction of total
+page area occupied by figures and tables (\textsc{PyMuPDF} bounding boxes),
+and keep PDFs whose density is at least 30\%. The retained PDFs are sampled,
+stratified by their MeSH tag, to four palier sizes: 100, 1{,}000, 10{,}000
+and 50{,}000 pages. Each palier is a strict subset of the next, so a model
+indexing the 50k-page palier has already paid the indexing cost for the
+smaller ones --- this is the regime of an organisation that grows its
+knowledge base incrementally.
+
+\paragraph{Track B (multilingual).} For each of six languages --- English,
+French, German, Spanish, Simplified Chinese, Arabic --- we target
+$\approx$1{,}500 pages from a language-appropriate open-access medical
+source: PMC-OA for English, HAL+Cairn for French, Thieme OA for German,
+SciELO for Spanish, CNKI OA for Chinese, the Saudi Medical Journal for
+Arabic. The same visual-density filter is applied. Chinese and Arabic are
+selected deliberately to stress the encoders along two orthogonal axes: a
+logographic script that shares no characters with the encoders' Latin-heavy
+pre-training distribution, and an RTL connected script that breaks the
+character-segmentation assumptions baked into most OCR-based pre-training
+proxies.
+
+\paragraph{Reproducibility.} Every corpus is shipped as a
+\texttt{CorpusManifest} JSON: for each PDF the manifest records its
+SHA-256 hash, page count, detected language, visual density, MeSH tags and
+source. The \texttt{bcv-corpus verify} command re-hashes the local files to
+detect drift; the manifest hash is recorded in every benchmark result so
+that any reported number can be traced back to the bytes that produced it.
 
 \subsection{Synthetic query generation}
-% Inverse query prompt, ambiguity filter, requires_visual=true gate.
+
+We generate one query set per (track, language, palier) tuple. For each
+page that passes the visual-density filter, we extract the page text with
+PyMuPDF, build a prompt that includes the text plus a structured visual hint
+(``this page contains $\geq$1 figure / table''), and ask Meditron-70B (via
+vLLM, OpenAI-compatible endpoint) to author exactly two clinical questions
+that can be answered \emph{only} by consulting that specific page. The
+prompt asks the LLM to flag each question with a \texttt{requires\_visual}
+boolean; we keep only those flagged \texttt{true}, ensuring the benchmark
+exercises the visual dimension rather than collapsing to a text-retrieval
+proxy.
+
+A second pass --- the \emph{ambiguity filter} --- re-presents each
+candidate question to the same judge along with the page text, and asks for
+a single confidence score in $[0, 1]$ representing whether the question is
+(a)~precise enough to admit a single best page-source, and (b)~genuinely
+tied to that particular page. Queries below a 0.8 confidence threshold are
+dropped. The kept queries are serialised as a \texttt{QuerySet} JSONL whose
+SHA-256 is recorded in every downstream result. Volumes are sized to
+$\sim$2{,}000 retained queries on Track A (spread across paliers) and
+$\sim$200 per language on Track B.
 
 \subsection{Methodology validation}
-% Phase 4: Pearson/Spearman vs ViDoRe healthcare annotated subset; >= 0.85 gate.
 
-\section{Track A — scaling study}
+Synthetic queries inherit the biases of the LLM that authored them, in
+particular a tendency to over-rely on textual cues that happen to be unique
+to a page. We bound this bias by validating the methodology against an
+annotated reference: we take a $\sim$50-document healthcare slice of
+\textsc{ViDoRe} v2 for which human-authored queries and gold pages exist,
+re-generate queries on the same documents with our pipeline, and compute
+nDCG@5 on both query sets under an identical retrieval configuration. We
+report the Pearson and Spearman correlations between the two per-document
+nDCG@5 vectors; the benchmark gates on a Pearson coefficient
+$\geq$ 0.85. If the gate fails we iterate on the generation prompt before
+running any benchmark cell, on the assumption that a methodology that does
+not correlate with human judgement on a known-good subset cannot be trusted
+on novel corpora.
+
+\section{Track A --- scaling study}
 \subsection{Setup}
+
+For each of the five models and four paliers we run three random seeds. A
+cell consists of: (1) processing the palier PDFs with
+\texttt{mmore colpali process}, (2) indexing the resulting embeddings with
+\texttt{mmore colpali index}, (3) running batched retrieval with
+\texttt{mmore colpali retrieve} over the palier's query set. Each step's
+duration, GPU memory peak (via \textsc{NVML}) and per-query latency are
+captured into a \texttt{BenchmarkRecord}. Sixty cells in total
+(5~models~$\times$~4~paliers~$\times$~3~seeds) are submitted as a SLURM job
+array. Hardware: a single H100 GPU per cell, 8 CPU cores, 64~GB RAM.
+
 \subsection{Retrieval results}
 % Figure: scaling curves with CI bands.
-% Table: nDCG@5 [CI] per model × palier.
+% Table: nDCG@5 [CI] per model x palier.
+
 \subsection{Generation results}
+
 \subsection{Performance results}
 % Latency p50/p95/p99, throughput, GPU memory peak vs corpus size.
+
 \subsection{Statistical analysis}
 % Pairwise Wilcoxon, Holm correction, effect sizes.
 
-\section{Track B — multilingual study}
+\section{Track B --- multilingual study}
 \subsection{Setup}
+
+For each model and language we run three seeds at the fixed
+$\sim$1{,}500-page corpus size. The remaining instrumentation is identical
+to Track A. Ninety cells (5~$\times$~6~$\times$~3) are submitted as a
+single SLURM array. The English cell of Track~B uses a disjoint corpus
+sample from Track~A so that the multilingual results do not implicitly
+benchmark against memorised content.
+
 \subsection{Per-language results}
 % Heatmap, language gap vs EN baseline.
+
 \subsection{Discussion of script effects (CJK, RTL)}
 
 \section{Discussion}
 
 \section{Limitations}
 \begin{itemize}
-  \item Synthetic queries (no human annotation). Mitigated by the Phase 4
-    correlation gate but a residual bias remains.
-  \item Single LLM judge (\textsc{Meditron}-70B). Inter-judge agreement is not
-    measured here; this is a future-work item.
-  \item Corpus skew: PMC-OA is US-centric and EN-dominant; multilingual sources
-    differ in domain mix and image quality.
+  \item \textbf{Synthetic queries.} Queries are authored by Meditron-70B
+    rather than by clinicians. The Phase~4 correlation gate ensures the
+    pipeline tracks human judgement on a known-good subset, but a residual
+    bias toward LLM-typical question shapes is inevitable. A
+    human-annotated subset of $\sim$50 questions per language is a natural
+    follow-up.
+  \item \textbf{Single LLM judge.} Both query filtering and RAGAS metrics
+    use a single Meditron-70B judge. Inter-judge agreement against, e.g.,
+    Claude or a second open-weights model is not measured here; this is an
+    explicit future-work item, not a quality claim.
+  \item \textbf{Corpus skew.} PMC-OA is US-centric and EN-dominant; the six
+    Track~B sources differ in domain mix, image quality and license terms.
+    We control for visual density but cannot equalise editorial style.
+  \item \textbf{Single GPU class.} All cells run on a single H100. We do
+    not measure how each encoder behaves under tighter VRAM constraints
+    (A100~40GB, T4) or on mixed-precision fallbacks.
+  \item \textbf{One pipeline.} The benchmark holds the pipeline constant
+    \emph{by design}, but the absolute numbers we report are conditional on
+    \textsc{mmore}'s specific implementation choices (Milvus \textsc{FLAT}
+    index, CPU MaxSim reranker, top-$k$=10 default). A different RAG stack
+    may reorder the models.
 \end{itemize}
 
 \section{Conclusion}
