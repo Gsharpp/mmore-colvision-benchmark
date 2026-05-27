@@ -4,8 +4,13 @@
 # Usage:
 #   scripts/setup.sh            # local install (CPU)
 #   scripts/setup.sh --gpu      # add CUDA wheels (machine with NVIDIA driver)
-#   scripts/setup.sh --rcp      # full EPFL RCP / LiGHT bootstrap (--gpu + vLLM
-#                                 + directory layout + post-install summary)
+#   scripts/setup.sh --rcp      # --gpu + vLLM in a local venv + dir layout
+#                                 (intended for SLURM / interactive GPU node)
+#
+# > For EPFL RCP (Run:AI / Kubernetes), this script is NOT the recommended path.
+# > Use `scripts/rcp/setup.sh` instead, which builds + pushes a Docker image
+# > and does not require uv sync on the cluster.
+# > See docs/RCP_QUICKSTART.md.
 
 set -euo pipefail
 
@@ -117,6 +122,10 @@ if [[ "${MODE}" == "--rcp" ]]; then
   6. If green, submit the full arrays:
        sbatch scripts/slurm/run_track_a.sbatch
        sbatch scripts/slurm/run_track_b.sbatch
+
+> For EPFL RCP / LiGHT specifically, prefer the Docker + Run:AI path:
+>   ./scripts/rcp/setup.sh && ./scripts/rcp/submit.sh all
+> See docs/RCP_QUICKSTART.md.
 ────────────────────────────────────────────────────────────────────────
 NEXT
 fi
