@@ -33,6 +33,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=private \
         libglib2.0-0 \
         openssh-client \
         openssl \
+        passwd \
         sudo \
         tini \
         wget \
