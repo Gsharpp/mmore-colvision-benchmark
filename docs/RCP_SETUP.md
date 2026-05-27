@@ -1,9 +1,13 @@
-# Connexion EPFL RCP (LiGHT lab)
+# Connexion EPFL RCP (LiGHT lab) — installation des outils
 
-Procédure pour accéder à la plateforme RCP du labo LiGHT depuis Linux/WSL2
+Procédure pour mettre en place **les outils d'accès** au RCP depuis Linux/WSL2
 (commandes adaptées de la procédure macOS arm64). Le RCP côté LiGHT est
-**Kubernetes + Run:AI + Docker**, pas SLURM — voir `scripts/slurm/*.sbatch`
-pour ce qui doit être refactoré (cf. tâche #25 dans le project tracker).
+**Kubernetes + Run:AI + Docker**, pas SLURM.
+
+> ℹ️ **Pour lancer le benchmark une fois les outils en place**, voir
+> [`RCP_QUICKSTART.md`](RCP_QUICKSTART.md) — 3 commandes du clone au résultat.
+> Cette page-ci décrit uniquement la mise en place initiale (VPN, kubectl,
+> runai, registry, build/push de l'image Docker).
 
 ## 1. Prérequis
 
@@ -29,18 +33,26 @@ Note le `uid` et le `gid` (light-scratch).
 
 ## 3. kubectl (en local, Linux amd64)
 
+Si tu n'as pas sudo, installe dans `~/.local/bin/` (qui est dans `$PATH` sur
+la plupart des distributions modernes) :
+
 ```bash
 curl -LO "https://dl.k8s.io/release/v1.29.6/bin/linux/amd64/kubectl"
 chmod +x ./kubectl
-sudo mv ./kubectl /usr/local/bin/kubectl
-sudo chown root: /usr/local/bin/kubectl
+mkdir -p ~/.local/bin && mv ./kubectl ~/.local/bin/kubectl
+hash -r
 
 mkdir -p ~/.kube
 curl -o ~/.kube/config https://raw.githubusercontent.com/epfml/getting-started/main/kubeconfig.yaml
 
 # Vérifier
-kubectl get pods
+kubectl version --client
 ```
+
+⚠️ Si tu as un `kubectl` cassé hérité d'une install précédente (par exemple un
+binaire macOS / ARM dans `/usr/local/bin/kubectl`), `~/.local/bin/kubectl` le
+masque car il vient avant dans `$PATH`. Sinon, `sudo mv ./kubectl /usr/local/bin/`
+suffit pour le remplacer.
 
 ## 4. CLI Run:AI (en local, Linux)
 
@@ -55,62 +67,44 @@ runai version
 runai list jobs
 ```
 
-## 5. Registry Docker
-
-1. Aller sur https://registry.rcp.epfl.ch/ et se connecter (GASPAR)
-2. Créer son projet personnel (ex. `mbonnet` ou un nom de ton choix — c'est ton
-   `LAB_NAME` plus bas)
-
-## 6. Template LiGHT
-
-```bash
-cd ~
-git clone https://github.com/EPFLiGHT/LiGHT-cluster-template.git
-cd LiGHT-cluster-template/installation/docker-amd64-cuda
-```
-
-Éditer le `.env` avec tes valeurs (toutes en minuscules pour `USR` /
-`LAB_NAME`) :
-
-```dotenv
-USR=<gaspar lowercase>
-USRID=<uid récupéré sur HaaS>
-GRPID=<gid récupéré sur HaaS>
-GRP=light-scratch
-PASSWD=<choix libre, password du user à l'intérieur du conteneur>
-LAB_NAME=<nom du projet créé sur registry.rcp.epfl.ch>
-```
-
-Build :
-
-```bash
-./template.sh build_generic --ignore-uncommitted
-./template.sh build_user    --ignore-uncommitted
-```
-
-(30 Go libres minimum — l'image embarque CUDA, PyTorch, etc.)
-
-## 7. Push de l'image
+## 5. Authentification Docker au registry
 
 ```bash
 docker login registry.rcp.epfl.ch -u <gaspar>
-./template.sh push RCP
+# mot de passe = mot de passe GASPAR / email EPFL
 ```
 
-## 8. (à venir) Soumission Run:AI
+Le registry crée automatiquement le namespace `<lab>/<user>/...` lors du
+premier push, pas besoin de créer un projet à la main.
 
-Une fois l'image poussée, soumettre des jobs avec `runai submit ...` ou via une
-spec YAML. Cette étape reste **à scripter** : nos `scripts/slurm/*.sbatch` ne
-sont pas compatibles avec Run:AI/Kubernetes (cf. tâche #25). Le pattern attendu
-sera :
+## 6. Build et push de l'image du benchmark
+
+Plutôt que d'utiliser le `template.sh` du template LiGHT (qui dépend de
+`docker compose` et d'une certaine structure de repo), le benchmark expose ses
+propres scripts :
 
 ```bash
-runai submit bcv-track-a-colpali-seed0 \
-  --image registry.rcp.epfl.ch/<lab_name>/<repo>:<tag> \
-  --gpu 1 \
-  --pvc light-scratch:/scratch \
-  --command -- bcv-run track-a --model-id colpali_v1_3 --seed 0 ...
+cd <repo>
+./scripts/rcp/setup.sh
 ```
 
-À adapter quand le Dockerfile sera prêt et qu'on aura la convention de
-montage des volumes scratch utilisée par LiGHT.
+Le script :
+
+- détecte ton uid / gid / projet Run:AI / lab automatiquement,
+- build l'image générique (`docker/Dockerfile`),
+- build l'image user avec tes uid / gid (`docker/Dockerfile.user`),
+- push vers `registry.rcp.epfl.ch/<lab>/<user>/bcv:<user>-latest`,
+- écrit `.rcp-env` (consommé par `scripts/rcp/submit.sh`).
+
+Compter ~10 min la première fois (30 Go libres recommandés pour le cache
+BuildKit). Les rebuilds incrémentaux sont rapides.
+
+Détails de l'architecture Docker (deux couches, code monté à runtime) :
+[`../docker/README.md`](../docker/README.md).
+
+## 7. Soumission Run:AI
+
+Voir [`RCP_QUICKSTART.md`](RCP_QUICKSTART.md) : `scripts/rcp/submit.sh smoke`,
+`./scripts/rcp/submit.sh all`, etc. Les `scripts/slurm/*.sbatch` historiques
+restent fournis pour les utilisateurs sur SLURM (voir
+[`RUN_OTHER_PLATFORMS.md`](RUN_OTHER_PLATFORMS.md)).
