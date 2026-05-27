@@ -1,0 +1,32 @@
+# syntax=docker/dockerfile:1.7
+#
+# User layer for the benchmark image.
+#
+# Builds a user with the host's uid/gid baked in so that bind-mounted NFS PVCs
+# on EPFL RCP (and any other NFS root_squash environment) are accessible.
+# Anyone running the benchmark on their own RCP account / lab rebuilds this
+# layer locally with `docker/build-user.sh`.
+
+ARG GENERIC_IMAGE=mmore-colvision-benchmark
+ARG GENERIC_TAG=generic-latest
+
+FROM ${GENERIC_IMAGE}:${GENERIC_TAG} AS runtime-user
+
+ARG USR=user
+ARG USRID=1000
+ARG GRP=user
+ARG GRPID=1000
+# PASSWD is not a secret — it only exists so `sudo` inside the container is not
+# password-less (the LiGHT convention).
+ARG PASSWD=changeme
+
+RUN groupadd -f -g ${GRPID} ${GRP} && \
+    useradd --shell /bin/bash --create-home --no-log-init \
+        -u ${USRID} -g ${GRP} \
+        -p "$(openssl passwd -1 ${PASSWD})" \
+        ${USR} && \
+    (usermod -aG sudo ${USR} 2>/dev/null || true) && \
+    chown -R ${USR}:${GRP} /opt/bcv /opt/bcv-entrypoints
+
+USER ${USR}
+WORKDIR /home/${USR}
