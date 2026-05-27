@@ -73,11 +73,21 @@ log "user identity: USR=${USR} USRID=${USRID} GRP=${GRP} GRPID=${GRPID}"
 # can submit to. We take the first project row.
 
 log "detecting Run:AI project..."
-RUNAI_ROW="$(
-    runai list projects --suppress-deprecation-message 2>/dev/null \
-        | awk 'NR>1 && NF>0 && $1 != "PROJECT" {print; exit}'
-)"
-[ -n "${RUNAI_ROW}" ] || fail "runai list projects returned nothing — run \`runai login\`?"
+RUNAI_OUT="$(mktemp -t bcv-runai.XXXXXX)"
+trap 'rm -f "${RUNAI_OUT}"' EXIT
+if ! runai list projects --suppress-deprecation-message > "${RUNAI_OUT}" 2>&1; then
+    warn "runai list projects failed. Output:"
+    sed 's/^/    /' "${RUNAI_OUT}" >&2
+    fail "could not enumerate runai projects — try \`runai login\` and re-run."
+fi
+
+# Skip header + deprecation warning lines; first row matching PROJECT layout wins.
+RUNAI_ROW="$(awk 'NR>1 && NF>0 && $1 != "PROJECT" && $1 != "CLI" && $1 !~ /^However|^Can|^Contact|^=/ {print; exit}' "${RUNAI_OUT}")"
+if [ -z "${RUNAI_ROW}" ]; then
+    warn "could not find a project row in runai output:"
+    sed 's/^/    /' "${RUNAI_OUT}" >&2
+    fail "no Run:AI project visible — does your user have one provisioned?"
+fi
 
 PROJECT="$(echo "${RUNAI_ROW}" | awk '{print $1}')"
 LAB="$(echo    "${RUNAI_ROW}" | awk '{print $2}')"
