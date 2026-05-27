@@ -1,0 +1,28 @@
+# mmore `colpali retrieve` config: query Milvus with ColPali embeddings.
+#
+# Schema (ColPaliRetrieverConfig at mmore/src/mmore/colpali/retriever.py):
+#   db_path             same Milvus DB as the index step
+#   collection_name     same Milvus collection as the index step
+#   model_name          HF model id; overridden per-cell by the benchmark via
+#                       `mmore colpali retrieve -m <hf_name>`
+#   top_k               default top-K for retrieval (the benchmark also reads
+#                       it from configs/track_a.yaml retrieval.top_k for
+#                       reporting, but mmore uses this value at retrieval time)
+#   max_workers         ThreadPool size for the MaxSim reranker
+#   metric_type         "IP" (matches the index step)
+#   text_parquet_path   optional — populates Document.page_content with the
+#                       extracted page text (needed for downstream RAG / RAGAS)
+#
+# ⚠️ Static smoke-test config — needs per-cell rendering for the full
+# benchmark, see task #26.
+
+db_path: data/track_a/milvus/smoke.db
+collection_name: bcv_smoke_pages
+
+model_name: vidore/colpali-v1.3
+
+top_k: 10
+max_workers: 4
+metric_type: IP
+
+text_parquet_path: data/track_a/process/pdf_page_text.parquet

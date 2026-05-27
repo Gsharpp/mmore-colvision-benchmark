@@ -1,0 +1,26 @@
+# mmore `colpali process` config: PDF → page PNGs → ColPali embeddings → Parquet.
+#
+# Schema (PDFProcessConfig at mmore/src/mmore/colpali/run_process.py):
+#   data_path        directory (or list of dirs) to crawl for *.pdf
+#   output_path      where pdf_page_objects.parquet + pdf_page_text.parquet land
+#   model_name       HF model id; overridden per-cell by the benchmark runner
+#                    via `mmore colpali process -m <hf_name>`
+#   skip_already_processed  resume mode (skip PDFs already in the parquet)
+#   num_workers      ThreadPool size for parallel batch processing
+#   batch_size       PDFs per ColPaliEmbedder batch
+#
+# ⚠️ This file is a *static smoke-test config*. The paths (`data_path`,
+# `output_path`) are shared by every cell of the benchmark, which means
+# multiple cells running back-to-back would overwrite each other's parquets.
+# For the full Track A / Track B run (5 models × 3 seeds × 4 paliers = 60+
+# cells), the orchestrator must render per-cell configs with isolated output
+# paths — tracked as task #26.
+
+data_path:  data/track_a/pdfs
+output_path: data/track_a/process
+
+model_name: vidore/colpali-v1.3
+
+skip_already_processed: false
+num_workers: 2
+batch_size: 8

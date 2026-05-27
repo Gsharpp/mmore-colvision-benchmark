@@ -1,0 +1,23 @@
+# mmore `colpali index` config: load embeddings from Parquet into Milvus.
+#
+# Schema (IndexConfig at mmore/src/mmore/colpali/run_index.py):
+#   parquet_path     where to read pdf_page_objects.parquet (output of `process`)
+#   milvus:
+#     db_path           on-disk path of the local Milvus collection
+#     collection_name   Milvus collection name (one per model family because
+#                       embedding dim differs: 128 for ColPali/ColQwen2/Gemma3
+#                       families, 320 for ColQwen3)
+#     create_collection true → drop + create at start (idempotent reruns)
+#     metric_type       "IP" (inner product, matches ColPali maxsim convention)
+#
+# ⚠️ Static smoke-test config — the full benchmark needs per-cell rendering so
+# every (model, palier, seed) cell points at its own parquet / Milvus DB.
+# See task #26.
+
+parquet_path: data/track_a/process/pdf_page_objects.parquet
+
+milvus:
+  db_path: data/track_a/milvus/smoke.db
+  collection_name: bcv_smoke_pages
+  create_collection: true
+  metric_type: IP
