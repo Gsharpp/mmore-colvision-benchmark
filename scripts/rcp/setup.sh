@@ -90,8 +90,19 @@ if [ -z "${RUNAI_ROW}" ]; then
 fi
 
 PROJECT="$(echo "${RUNAI_ROW}" | awk '{print $1}')"
-LAB="$(echo    "${RUNAI_ROW}" | awk '{print $2}')"
-[ -n "${PROJECT}" ] && [ -n "${LAB}" ] || fail "could not parse runai project (got '${RUNAI_ROW}')"
+LAB="${LAB:-$(echo "${RUNAI_ROW}" | awk '{print $2}')}"
+[ -n "${PROJECT}" ] || fail "could not parse runai project (got '${RUNAI_ROW}')"
+
+# Fall back to deriving the lab from the project name (LiGHT convention:
+# <lab>-<user>) when the DEPARTMENT column reports "(default)" or anything
+# that wouldn't be a valid Docker image path component.
+if [ -z "${LAB}" ] || ! echo "${LAB}" | grep -qE '^[a-z0-9][a-z0-9._-]*$'; then
+    derived="${PROJECT%%-*}"
+    warn "DEPARTMENT column reported '${LAB}' which is not a valid Docker path"
+    warn "deriving lab='${derived}' from project name '${PROJECT}'"
+    warn "override with: LAB=<your-lab> $0"
+    LAB="${derived}"
+fi
 log "Run:AI: project=${PROJECT} lab=${LAB}"
 
 ########################################################################
