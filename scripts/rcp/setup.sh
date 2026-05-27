@@ -32,13 +32,39 @@ done
 docker info >/dev/null 2>&1 || fail "docker daemon not reachable."
 
 ########################################################################
-# 2. Detect the host user identity (will be baked into the user image).
+# 2. Detect the user identity to bake into the image.
+#
+# IMPORTANT: this must be the *RCP* uid/gid (so the container can write to
+# light-scratch PVCs through NFS root_squash), NOT the local WSL/laptop one.
+# Default to `id` but warn loudly if uid<1000 looks like a local-only account
+# (RCP uids are 6-digit). Override via env: USR=, USRID=, GRP=, GRPID=.
 
 USR="${USR:-$(id -un)}"
 USRID="${USRID:-$(id -u)}"
 GRPID="${GRPID:-$(id -g)}"
 GRP="${GRP:-$(id -gn)}"
-log "host identity: USR=${USR} USRID=${USRID} GRP=${GRP} GRPID=${GRPID}"
+
+# Probe HaaS to get the right ids if local ones look local-only and ssh is set up.
+if [ "${USRID}" -lt 100000 ]; then
+    warn "host uid=${USRID} looks like a local account, not an EPFL GASPAR uid"
+    warn "(RCP NFS PVCs are owned by your GASPAR uid in the 300000+ range)"
+    warn "an image built with uid=${USRID} will fail to read /mloscratch on RCP"
+    warn ""
+    warn "options:"
+    warn "  1. abort, then re-run as:"
+    warn "       USR=<gaspar> USRID=<rcp-uid> GRP=<rcp-group> GRPID=<rcp-gid> $0"
+    warn "  2. abort, then fetch your ids from HaaS:"
+    warn "       ssh <gaspar>@haas001.rcp.epfl.ch id"
+    warn "     and re-run with those values"
+    warn ""
+    read -r -p "[bcv-setup] continue anyway with local uid? [y/N] " ans
+    case "${ans}" in
+        y|Y|yes|YES) log "continuing with local uid (image won't work on RCP NFS)" ;;
+        *) fail "aborted — re-run with the override env vars above" ;;
+    esac
+fi
+
+log "user identity: USR=${USR} USRID=${USRID} GRP=${GRP} GRPID=${GRPID}"
 
 ########################################################################
 # 3. Detect the Run:AI project + lab (department).
