@@ -98,11 +98,13 @@ wait_for_bootstrap() {
 # Clear any previous attempt so the name is free.
 runai delete job "${JOB_NAME}" --suppress-deprecation-message >/dev/null 2>&1 || true
 
+# NB: no --working-dir. runc creates the working dir as root, which NFS
+# root_squash maps to `nobody` — it cannot mkdir under the scratch PVC and the
+# pod dies with StartError. Instead the REMOTE_CMD cds as the real user below.
 args=(
     --name "${JOB_NAME}"
     --image "${IMAGE}"
     --gpu 0
-    --working-dir "${PROJECT_ROOT_AT}"
     --suppress-deprecation-message
 )
 if [ -n "${PVC_SCRATCH:-}" ]; then

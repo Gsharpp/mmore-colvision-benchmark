@@ -45,11 +45,13 @@ submit_one() {
     local gpus="$1"; shift
     local cmd="$1";  shift
 
+    # No --working-dir: runc would create it as root (NFS root_squash → nobody)
+    # and the pod dies with StartError. The entrypoint cds to PROJECT_ROOT_AT
+    # itself, running as the real user.
     local args=(
         --name "${name}"
         --image "${IMAGE}"
         --gpu "${gpus}"
-        --working-dir "${PROJECT_ROOT_AT}"
         -e PROJECT_ROOT_AT="${PROJECT_ROOT_AT}"
         -e PACKAGE_NAME=benchmark_colvision
         -e BCV_VENV="${BCV_VENV}"
