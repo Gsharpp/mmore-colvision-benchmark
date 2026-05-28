@@ -25,10 +25,13 @@ source .rcp-env
 ACTION="${1:-help}"
 shift || true
 
-PROJECT_ROOT_AT="/mloscratch/${USR}/bcv-dev"
-HF_HOME="/mloscratch/${USR}/hf-cache"
+# Personal scratch directory. LiGHT convention is /mloscratch/users/<gaspar>;
+# override by setting SCRATCH_DIR in .rcp-env if your lab uses another layout.
+SCRATCH_DIR="${SCRATCH_DIR:-/mloscratch/users/${USR}}"
+PROJECT_ROOT_AT="${SCRATCH_DIR}/bcv-dev"
+HF_HOME="${SCRATCH_DIR}/hf-cache"
 # Shared venv on scratch, created once by scripts/rcp/bootstrap-venv.sh.
-BCV_VENV="/mloscratch/${USR}/bcv-venv"
+BCV_VENV="${SCRATCH_DIR}/bcv-venv"
 
 # Inline command resolving the mmore commit recorded in pyproject.toml. The
 # benchmark embeds it in every BenchmarkRecord for reproducibility.

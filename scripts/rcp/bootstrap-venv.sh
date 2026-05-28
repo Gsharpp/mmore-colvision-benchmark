@@ -31,9 +31,12 @@ WAIT=0
 source .rcp-env
 
 JOB_NAME="bcv-bootstrap"
-PROJECT_ROOT_AT="/mloscratch/${USR}/bcv-dev"
-BCV_VENV="/mloscratch/${USR}/bcv-venv"
-UV_CACHE_DIR="/mloscratch/${USR}/uv-cache"
+# Personal scratch directory. LiGHT convention is /mloscratch/users/<gaspar>;
+# override by setting SCRATCH_DIR in .rcp-env if your lab uses another layout.
+SCRATCH_DIR="${SCRATCH_DIR:-/mloscratch/users/${USR}}"
+PROJECT_ROOT_AT="${SCRATCH_DIR}/bcv-dev"
+BCV_VENV="${SCRATCH_DIR}/bcv-venv"
+UV_CACHE_DIR="${SCRATCH_DIR}/uv-cache"
 FB="${FORCE_BOOTSTRAP:-0}"
 
 # What the pod does. ASCII sentinels (BCV_BOOTSTRAP_DONE / _FAIL) let the local

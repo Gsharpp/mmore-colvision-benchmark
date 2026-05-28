@@ -29,9 +29,10 @@ Si une étape coince, le détail complet de la mise en place est dans
 
 ```bash
 ssh <gaspar>@haas001.rcp.epfl.ch
-mkdir -p /mnt/light/scratch/$USER
-cd /mnt/light/scratch/$USER
+mkdir -p /mnt/light/scratch/users/$USER
+cd /mnt/light/scratch/users/$USER
 git clone <repo-url> bcv-dev
+cd bcv-dev && git config core.filemode false   # évite des diffs de bit exécutable parasites sur NFS
 exit
 ```
 
@@ -117,10 +118,10 @@ runai exec -it <job-name> bash   # shell dans le pod
 ## Résultats
 
 Les `BenchmarkRecord` JSON et logs sont écrits dans le scratch LiGHT, à
-`/mnt/light/scratch/<user>/bcv-dev/results/`. Pour les rapatrier en local :
+`/mnt/light/scratch/users/<user>/bcv-dev/results/`. Pour les rapatrier en local :
 
 ```bash
-scp -r <gaspar>@haas001.rcp.epfl.ch:/mnt/light/scratch/<user>/bcv-dev/results ./results
+scp -r <gaspar>@haas001.rcp.epfl.ch:/mnt/light/scratch/users/<user>/bcv-dev/results ./results
 ```
 
 ## En cas d'échec d'une étape
@@ -133,6 +134,13 @@ scp -r <gaspar>@haas001.rcp.epfl.ch:/mnt/light/scratch/<user>/bcv-dev/results ./
   les credentials registry du namespace sont expirées.
 - `runai logs <job>` montre `BCV_VENV=... has no python interpreter` → le venv
   scratch n'est pas (ou plus) construit : (re)lance `./scripts/rcp/bootstrap-venv.sh`.
+- Un modèle *gated* sur HF (p. ex. ColGemma3) échoue au download avec un 401/403
+  → dépose un token HF sur le scratch et passe-le aux jobs. Convention LiGHT :
+  un fichier pointé par `HF_TOKEN_AT` (cf. doc LiGHT). À défaut, `-e HF_TOKEN=...`
+  dans `submit.sh`. (Non requis pour le smoke `colpali_v1_3`.)
+- Le `--wait` du bootstrap bloque ton terminal, mais le job est un job `train`
+  persistant : s'il coupe (VPN), le job continue côté cluster — reconnecte-toi et
+  relance `./scripts/rcp/bootstrap-venv.sh --wait` (fast-path si déjà fini).
 
 Voir [`RCP_SETUP.md`](RCP_SETUP.md) pour les recettes de debug détaillées.
 

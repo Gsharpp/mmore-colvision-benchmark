@@ -280,9 +280,10 @@ ready (bootstrap rc=${BOOTSTRAP_RC}).
 Most likely cause: the repo isn't cloned on the scratch PVC yet. From HaaS:
 
     ssh ${USR}@haas001.rcp.epfl.ch
-    mkdir -p /mnt/light/scratch/${USR}
-    cd /mnt/light/scratch/${USR}
+    mkdir -p /mnt/light/scratch/users/${USR}
+    cd /mnt/light/scratch/users/${USR}
     git clone <repo-url> bcv-dev
+    cd bcv-dev && git config core.filemode false
     exit
 
 Then build the venv (re-runnable, idempotent):
