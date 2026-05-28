@@ -1,0 +1,38 @@
+# Exclude everything heavy from the Docker build context.
+# Without this, `docker build` sends the full repo (7+ GB) to the daemon on
+# every run, which dominates build time even on cache hits.
+
+# Python virtualenv (rebuilt inside the image, 7 GB on disk)
+.venv/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Tooling caches
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.tox/
+.coverage
+htmlcov/
+
+# Version control (image doesn't need it)
+.git/
+.gitignore
+
+# IDE & editor
+.idea/
+.vscode/
+.claude/
+
+# Project artefacts that don't belong in the image
+results/
+data/
+report/
+docs/
+tests/
+.rcp-env
+
+# OS junk
+.DS_Store
+Thumbs.db
