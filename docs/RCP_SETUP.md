@@ -90,10 +90,13 @@ cd <repo>
 
 Le script :
 
-- détecte ton uid / gid / projet Run:AI / lab automatiquement,
+- détecte ton uid / gid / projet Run:AI automatiquement,
 - build l'image générique (`docker/Dockerfile`),
 - build l'image user avec tes uid / gid (`docker/Dockerfile.user`),
-- push vers `registry.rcp.epfl.ch/<lab>/<user>/bcv:<user>-latest`,
+- push vers `registry.rcp.epfl.ch/<gaspar>/bcv:<gaspar>-latest`
+  (par défaut Harbor project homonyme du GASPAR ; override via
+  `HARBOR_PROJECT=<name> ./scripts/rcp/setup.sh` si ton lab utilise
+  un project partagé),
 - écrit `.rcp-env` (consommé par `scripts/rcp/submit.sh`).
 
 Compter ~10 min la première fois (30 Go libres recommandés pour le cache

@@ -25,6 +25,7 @@ echo "[bcv-build-user]   USR=${USR} USRID=${USRID} GRP=${GRP} GRPID=${GRPID}"
 DOCKER_BUILDKIT=1 docker build \
     -f docker/Dockerfile.user \
     -t "${IMAGE_NAME}:${USR_TAG}" \
+    --pull=false \
     --build-arg "GENERIC_IMAGE=${IMAGE_NAME}" \
     --build-arg "GENERIC_TAG=${GENERIC_TAG}" \
     --build-arg "USR=${USR}" \

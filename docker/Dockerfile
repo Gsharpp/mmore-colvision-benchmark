@@ -80,7 +80,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM uv-deps AS runtime-generic
 
 ENV VIRTUAL_ENV=/opt/bcv/.venv \
-    PATH=/opt/bcv/.venv/bin:/usr/local/bin:/usr/bin:/bin \
+    PATH=/opt/bcv/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 

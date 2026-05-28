@@ -67,7 +67,7 @@ fi
 log "user identity: USR=${USR} USRID=${USRID} GRP=${GRP} GRPID=${GRPID}"
 
 ########################################################################
-# 3. Detect the Run:AI project + lab (department).
+# 3. Detect the Run:AI project (used as the Kubernetes namespace prefix).
 #
 # `runai list projects` emits a header line then one row per project the user
 # can submit to. We take the first project row.
@@ -90,39 +90,35 @@ if [ -z "${RUNAI_ROW}" ]; then
 fi
 
 PROJECT="$(echo "${RUNAI_ROW}" | awk '{print $1}')"
-LAB="${LAB:-$(echo "${RUNAI_ROW}" | awk '{print $2}')}"
 [ -n "${PROJECT}" ] || fail "could not parse runai project (got '${RUNAI_ROW}')"
-
-# Fall back to deriving the lab from the project name (LiGHT convention:
-# <lab>-<user>) when the DEPARTMENT column reports "(default)" or anything
-# that wouldn't be a valid Docker image path component.
-if [ -z "${LAB}" ] || ! echo "${LAB}" | grep -qE '^[a-z0-9][a-z0-9._-]*$'; then
-    derived="${PROJECT%%-*}"
-    warn "DEPARTMENT column reported '${LAB}' which is not a valid Docker path"
-    warn "deriving lab='${derived}' from project name '${PROJECT}'"
-    warn "override with: LAB=<your-lab> $0"
-    LAB="${derived}"
-fi
-log "Run:AI: project=${PROJECT} lab=${LAB}"
+log "Run:AI: project=${PROJECT}"
 
 ########################################################################
 # 4. Construct the image identifier and verify registry access.
+#
+# EPFL RCP Harbor convention: each GASPAR user is "Project Admin" on a
+# personal Harbor project named after their GASPAR username. Override via
+# HARBOR_PROJECT=<name> if your lab uses a shared project instead.
 
-IMAGE_REPO="${REGISTRY}/${LAB}/${USR}/bcv"
+HARBOR_PROJECT="${HARBOR_PROJECT:-${USR}}"
+IMAGE_REPO="${REGISTRY}/${HARBOR_PROJECT}/bcv"
 GENERIC_TAG="generic-latest"
 USR_TAG="${USR}-latest"
 IMAGE_USR="${IMAGE_REPO}:${USR_TAG}"
 IMAGE_GEN="${IMAGE_REPO}:${GENERIC_TAG}"
+log "Harbor project: ${HARBOR_PROJECT} (override with HARBOR_PROJECT=<name> if your lab uses a shared registry project)"
 log "target image: ${IMAGE_USR}"
 
-# Probe the registry credentials. A 401/403 means we are not logged in.
-if ! docker pull "${IMAGE_GEN}" >/tmp/bcv-docker-probe.log 2>&1; then
+# Probe the registry credentials with a HEAD-only manifest inspect (cheap, <1s).
+# `docker pull` here would re-download the full generic on every run (~10 min on VPN).
+# A 401/403 means we are not logged in; a "not found" is expected on first build.
+if ! docker manifest inspect "${IMAGE_GEN}" >/tmp/bcv-docker-probe.log 2>&1; then
     if grep -qiE "unauthorized|denied|authentication" /tmp/bcv-docker-probe.log; then
-        warn "docker pull denied — you are probably not logged in:"
+        warn "registry access denied — you are probably not logged in:"
         warn "    docker login ${REGISTRY} -u ${USR}"
         fail "abort. Run the docker login above, then re-run setup.sh."
     fi
-    # 404 / not found is expected on first build — keep going.
+    # "manifest unknown" / 404 is expected on first build — keep going.
 fi
 
 ########################################################################
@@ -150,13 +146,45 @@ log "building generic image (this can take ~10 min on first run)..."
 IMAGE_NAME="${IMAGE_REPO}" GENERIC_TAG="${GENERIC_TAG}" \
     bash docker/build-generic.sh
 
+# Push the freshly built generic so the registry stays in sync. Other users in
+# the same lab can then reuse it without rebuilding the heavy CUDA + uv stack.
+push_with_diag() {
+    local image="$1"
+    local log="$(mktemp -t bcv-push.XXXXXX)"
+    # `script -q` gives docker push a pseudo-TTY so it keeps its compact
+    # in-place progress display (instead of one line per status update when
+    # piped through `tee`). The typescript file still captures everything for
+    # 401/403 detection. -e propagates docker's exit code.
+    local rc=0
+    if command -v script >/dev/null 2>&1; then
+        script -q -e -c "docker push '${image}'" "${log}" </dev/null
+        rc=$?
+    else
+        docker push "${image}" 2>&1 | tee "${log}"
+        rc="${PIPESTATUS[0]}"
+    fi
+    if [ "${rc}" -eq 0 ]; then rm -f "${log}"; return 0; fi
+    if grep -qiE "unauthorized|denied|401|403" "${log}"; then
+        warn ""
+        warn "push denied to ${image}. Your Harbor project is probably not"
+        warn "'${HARBOR_PROJECT}'. Check https://${REGISTRY}/ for the project"
+        warn "name where you have Developer/Maintainer/Project Admin role, then re-run with:"
+        warn "    HARBOR_PROJECT=<your-project-name> $0"
+    fi
+    rm -f "${log}"
+    return 1
+}
+
+log "pushing ${IMAGE_GEN}..."
+push_with_diag "${IMAGE_GEN}" || fail "docker push generic failed."
+
 log "building user image..."
 IMAGE_NAME="${IMAGE_REPO}" GENERIC_TAG="${GENERIC_TAG}" USR_TAG="${USR_TAG}" \
     USR="${USR}" USRID="${USRID}" GRP="${GRP}" GRPID="${GRPID}" \
     bash docker/build-user.sh
 
 log "pushing ${IMAGE_USR}..."
-docker push "${IMAGE_USR}" || fail "docker push failed. Logs above."
+push_with_diag "${IMAGE_USR}" || fail "docker push user failed."
 
 ########################################################################
 # 7. Persist detected values for submit.sh.
@@ -169,7 +197,7 @@ USRID=${USRID}
 GRP=${GRP}
 GRPID=${GRPID}
 PROJECT=${PROJECT}
-LAB=${LAB}
+HARBOR_PROJECT=${HARBOR_PROJECT}
 NAMESPACE=${NS}
 IMAGE=${IMAGE_USR}
 PVC_SCRATCH=${PVC_SCRATCH}

@@ -46,11 +46,14 @@ cd <repo>
 Ce que fait `setup.sh` automatiquement :
 
 1. détecte ton uid/gid (`id`)
-2. détecte ton projet Run:AI et ton lab (`runai list projects`)
+2. détecte ton projet Run:AI (`runai list projects`)
 3. découvre les PVCs `home` et `light-scratch` (`kubectl get pvc`)
 4. build l'image générique (`docker/Dockerfile`)
 5. build l'image user avec tes uid/gid (`docker/Dockerfile.user`)
-6. push vers `registry.rcp.epfl.ch/<lab>/<user>/bcv:<user>-latest`
+6. push vers `registry.rcp.epfl.ch/<gaspar>/bcv:<gaspar>-latest`
+   (override via `HARBOR_PROJECT=<name>` si ton project Harbor ne porte pas
+   ton login GASPAR — la convention RCP par défaut est un project privé
+   homonyme dont tu es Project Admin)
 7. écrit `.rcp-env` (ignoré par git)
 
 Compter ~10 min la première fois (download de la base CUDA + sync uv). Les
