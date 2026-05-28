@@ -27,6 +27,8 @@ shift || true
 
 PROJECT_ROOT_AT="/mloscratch/${USR}/bcv-dev"
 HF_HOME="/mloscratch/${USR}/hf-cache"
+# Shared venv on scratch, created once by scripts/rcp/bootstrap-venv.sh.
+BCV_VENV="/mloscratch/${USR}/bcv-venv"
 
 # Inline command resolving the mmore commit recorded in pyproject.toml. The
 # benchmark embeds it in every BenchmarkRecord for reproducibility.
@@ -47,6 +49,7 @@ submit_one() {
         --working-dir "${PROJECT_ROOT_AT}"
         -e PROJECT_ROOT_AT="${PROJECT_ROOT_AT}"
         -e PACKAGE_NAME=benchmark_colvision
+        -e BCV_VENV="${BCV_VENV}"
         -e HF_HOME="${HF_HOME}"
         --suppress-deprecation-message
     )

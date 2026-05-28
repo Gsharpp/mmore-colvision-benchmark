@@ -88,22 +88,30 @@ cd <repo>
 ./scripts/rcp/setup.sh
 ```
 
+⚠️ Clone d'abord le repo sur le scratch PVC (cf. `RCP_QUICKSTART.md` §1) :
+`setup.sh` enchaîne sur le bootstrap du venv, qui en a besoin.
+
 Le script :
 
 - détecte ton uid / gid / projet Run:AI automatiquement,
-- build l'image générique (`docker/Dockerfile`),
+- build l'image générique **légère** (`docker/Dockerfile` : apt + uv,
+  **sans** torch/vllm/mmore),
 - build l'image user avec tes uid / gid (`docker/Dockerfile.user`),
 - push vers `registry.rcp.epfl.ch/<gaspar>/bcv:<gaspar>-latest`
   (par défaut Harbor project homonyme du GASPAR ; override via
   `HARBOR_PROJECT=<name> ./scripts/rcp/setup.sh` si ton lab utilise
   un project partagé),
-- écrit `.rcp-env` (consommé par `scripts/rcp/submit.sh`).
+- écrit `.rcp-env` (consommé par `scripts/rcp/submit.sh`),
+- lance le **bootstrap du venv sur le cluster** (job CPU qui fait le `uv sync`
+  sur le scratch) et **attend qu'il soit prêt**.
 
-Compter ~10 min la première fois (30 Go libres recommandés pour le cache
-BuildKit). Les rebuilds incrémentaux sont rapides.
+Comme les grosses dépendances ne sont **plus** dans l'image, le push est petit
+(~3 Go, surtout la base CUDA) et survit à une connexion instable ; le `uv sync`
+lourd tourne sur le réseau rapide du cluster. Pour reconstruire le venv après un
+changement de dépendances : `./scripts/rcp/bootstrap-venv.sh --wait` (idempotent).
 
-Détails de l'architecture Docker (deux couches, code monté à runtime) :
-[`../docker/README.md`](../docker/README.md).
+Détails de l'architecture Docker (image légère, venv sur scratch, code monté à
+runtime) : [`../docker/README.md`](../docker/README.md).
 
 ## 7. Soumission Run:AI
 

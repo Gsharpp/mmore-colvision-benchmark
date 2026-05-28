@@ -1,6 +1,10 @@
 # Quickstart — lancer le benchmark sur EPFL RCP
 
-Trois commandes du clone à la fin du benchmark.
+Du clone au résultat en **2 commandes** : `setup.sh` (build + push de l'image
+légère **et** venv sur le cluster, une seule fois) puis `submit.sh`.
+
+> **Déjà tout en place** (image poussée + venv scratch construit) ? Une seule
+> commande suffit : `./scripts/rcp/submit.sh all`.
 
 ## Prérequis (une fois, par utilisateur)
 
@@ -34,7 +38,7 @@ exit
 `bcv-dev` est le checkout vivant — toute modif `git pull` est immédiatement
 visible des jobs suivants, sans rebuild d'image.
 
-## 2. Setup local (build + push de l'image)
+## 2. Setup (build + push de l'image + venv sur le cluster)
 
 Depuis le clone local (où `kubectl`/`runai`/`docker` sont configurés) :
 
@@ -43,21 +47,26 @@ cd <repo>
 ./scripts/rcp/setup.sh
 ```
 
-Ce que fait `setup.sh` automatiquement :
+Une seule commande qui :
 
-1. détecte ton uid/gid (`id`)
-2. détecte ton projet Run:AI (`runai list projects`)
-3. découvre les PVCs `home` et `light-scratch` (`kubectl get pvc`)
-4. build l'image générique (`docker/Dockerfile`)
-5. build l'image user avec tes uid/gid (`docker/Dockerfile.user`)
-6. push vers `registry.rcp.epfl.ch/<gaspar>/bcv:<gaspar>-latest`
-   (override via `HARBOR_PROJECT=<name>` si ton project Harbor ne porte pas
-   ton login GASPAR — la convention RCP par défaut est un project privé
-   homonyme dont tu es Project Admin)
-7. écrit `.rcp-env` (ignoré par git)
+1. détecte ton uid/gid, ton projet Run:AI, tes PVCs ;
+2. build l'image **légère** (`docker/Dockerfile` : apt + uv, **sans** torch/
+   vllm/mmore) puis l'image user avec tes uid/gid (`docker/Dockerfile.user`) ;
+3. push vers `registry.rcp.epfl.ch/<gaspar>/bcv:<gaspar>-latest`
+   (override via `HARBOR_PROJECT=<name>` si ton project Harbor ne porte pas ton
+   login GASPAR — la convention RCP par défaut est un project privé homonyme) ;
+4. écrit `.rcp-env` (ignoré par git) ;
+5. lance le **bootstrap du venv sur le cluster** et **attend qu'il soit prêt**.
 
-Compter ~10 min la première fois (download de la base CUDA + sync uv). Les
-rebuilds sont rapides grâce au cache BuildKit.
+L'image ne contient **plus** torch/vllm/mmore : elle est petite (~3 Go au lieu
+de ~8), donc le push tient sur une connexion instable. Le `uv sync` lourd tourne
+**sur RCP** (réseau rapide), dans un venv partagé sur le scratch que tous les
+jobs réutilisent. À refaire seulement quand les dépendances changent : relance
+`./scripts/rcp/bootstrap-venv.sh --wait` (idempotent).
+
+> ⚠️ L'étape clone (§1) doit être faite **avant** `setup.sh` : le bootstrap en a
+> besoin. Sinon `setup.sh` te le signale et tu relances `bootstrap-venv.sh --wait`
+> une fois le clone fait.
 
 ## 3. Lancer
 
@@ -122,6 +131,8 @@ scp -r <gaspar>@haas001.rcp.epfl.ch:/mnt/light/scratch/<user>/bcv-dev/results ./
   ou un autre user occupe les GPUs du département.
 - `runai logs <job>` montre `ImagePullBackOff` → l'image n'est pas pushée ou
   les credentials registry du namespace sont expirées.
+- `runai logs <job>` montre `BCV_VENV=... has no python interpreter` → le venv
+  scratch n'est pas (ou plus) construit : (re)lance `./scripts/rcp/bootstrap-venv.sh`.
 
 Voir [`RCP_SETUP.md`](RCP_SETUP.md) pour les recettes de debug détaillées.
 

@@ -3,10 +3,14 @@
 # Generic (user-agnostic) image for the mmore-colvision benchmark.
 #
 # Layered design adapted from EPFLiGHT/LiGHT-cluster-template:
-#   - This Dockerfile builds the runtime *environment* (apt + uv + Python deps).
-#   - The benchmark *code* is NOT copied in — it is mounted at runtime from a
-#     PVC / bind-mount under PROJECT_ROOT_AT, and installed editable by the
-#     entrypoint. This decouples image rebuilds from code iteration.
+#   - This Dockerfile builds a *lean* runtime toolbox (apt + uv + a managed
+#     Python). It deliberately does NOT bake the multi-GB Python dependency set
+#     (torch, vllm, mmore...) — that lives in a venv created once on the cluster
+#     scratch PVC by `scripts/rcp/bootstrap-venv.sh`. Keeping the deps out of
+#     the image makes the push to Harbor small and resilient on a flaky link
+#     (the heavy `uv sync` download then runs on the cluster's fast network).
+#   - The benchmark *code* is likewise NOT copied in — it is mounted at runtime
+#     from a PVC / bind-mount under PROJECT_ROOT_AT.
 #   - A second Dockerfile (`Dockerfile.user`) layers a host-matching user on top
 #     so NFS root_squash on RCP does not deny access to the mounted PVCs.
 #
@@ -40,47 +44,35 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=private \
     && rm -rf /var/lib/apt/lists/*
 
 ########################################################################
-# Stage 2 — install uv and resolve project dependencies (no project install).
+# Stage 2 — install uv and a managed Python interpreter (no project deps).
+#
+# The interpreter is baked at a stable, world-readable path so the scratch venv
+# (created by bootstrap-venv.sh and shared by every job from this same image)
+# can reference it. It must NOT live under /root: the user image runs as a
+# non-root user (Dockerfile.user) and /root is mode 700, which would make the
+# venv's python symlink unresolvable. No project dependencies are installed here.
 
-FROM apt-base AS uv-deps
+FROM apt-base AS uv-base
 ARG UV_VERSION
 ARG PYTHON_VERSION
+
+# uv discovers/installs managed Pythons here; inherited by all later stages.
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
 
 RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh && \
     mv /root/.local/bin/uv  /usr/local/bin/uv && \
     mv /root/.local/bin/uvx /usr/local/bin/uvx
 
-RUN uv python install ${PYTHON_VERSION}
-
-WORKDIR /opt/bcv
-
-# uv needs pyproject.toml + uv.lock to resolve, and README.md is referenced
-# from pyproject `readme = "README.md"`.
-COPY pyproject.toml uv.lock README.md ./
-
-# --no-install-project installs all dependencies but not the package itself.
-# The package will be installed editable at runtime from PROJECT_ROOT_AT.
-ENV UV_PROJECT_ENVIRONMENT=/opt/bcv/.venv \
-    UV_PYTHON=${PYTHON_VERSION} \
-    UV_LINK_MODE=copy
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --extra gpu
-
-# vLLM + langchain-openai are installed unfrozen on top: they pin
-# torchvision/triton tighter than mmore[cu126] and would otherwise force
-# lockfile downgrades. We accept the looser resolution because they are only
-# used to run the local LLM judge service.
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --python /opt/bcv/.venv/bin/python \
-        "vllm>=0.6" "langchain-openai>=0.2"
+RUN uv python install ${PYTHON_VERSION} && \
+    chmod -R a+rX /opt/uv
 
 ########################################################################
-# Stage 3 — generic runtime (no user). Pushable to a public registry.
+# Stage 3 — generic runtime (no user, no deps). Small and pushable.
 
-FROM uv-deps AS runtime-generic
+FROM uv-base AS runtime-generic
 
-ENV VIRTUAL_ENV=/opt/bcv/.venv \
-    PATH=/opt/bcv/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+ENV UV_PYTHON=3.11 \
+    UV_LINK_MODE=copy \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 

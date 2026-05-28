@@ -22,15 +22,30 @@ if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then
         bash docker/build-user.sh
 fi
 
-# By default, mount the repo at /workspace and point PROJECT_ROOT_AT to it.
-# The entrypoint will pip install -e it.
-docker run --rm -it \
-    --gpus all \
-    --shm-size=8g \
-    -v "$(pwd):/workspace:rw" \
-    -e PROJECT_ROOT_AT=/workspace \
-    -e PACKAGE_NAME=benchmark_colvision \
-    -e HF_HOME="${HF_HOME:-/workspace/data/.hf-cache}" \
-    -w /workspace \
-    "${IMAGE}" \
-    "$@"
+# The image is lean (no Python deps). The dependency venv lives in a host dir
+# mounted at /venv — the local equivalent of the RCP scratch venv. Build it once
+# inside the container (so interpreter paths match the /venv mount), then reuse.
+VENV_HOST="${BCV_VENV_HOST:-$(pwd)/.venv-docker}"
+mkdir -p "${VENV_HOST}"
+
+MOUNTS=(
+    -v "$(pwd):/workspace:rw"
+    -v "${VENV_HOST}:/venv:rw"
+)
+ENVS=(
+    -e PROJECT_ROOT_AT=/workspace
+    -e PACKAGE_NAME=benchmark_colvision
+    -e BCV_VENV=/venv
+    -e HF_HOME="${HF_HOME:-/workspace/data/.hf-cache}"
+)
+
+if [ ! -x "${VENV_HOST}/bin/python" ]; then
+    echo "[bcv-local] /venv empty — populating it once (uv sync + vllm)..."
+    docker run --rm -i --gpus all --shm-size=8g "${MOUNTS[@]}" "${ENVS[@]}" \
+        -w /workspace "${IMAGE}" \
+        bash -lc 'UV_PROJECT_ENVIRONMENT=/venv UV_LINK_MODE=copy uv sync --frozen --extra gpu \
+                  && UV_PROJECT_ENVIRONMENT=/venv uv pip install "vllm>=0.6" "langchain-openai>=0.2"'
+fi
+
+docker run --rm -it --gpus all --shm-size=8g "${MOUNTS[@]}" "${ENVS[@]}" \
+    -w /workspace "${IMAGE}" "$@"

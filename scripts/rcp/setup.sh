@@ -239,32 +239,25 @@ EOF
 log "wrote .rcp-env"
 
 ########################################################################
-# 8. Help the user prep the runtime PROJECT_ROOT_AT on the scratch PVC.
+# 8. Build the shared scratch venv on the cluster (one-time, idempotent).
 #
-# The benchmark code is mounted from the scratch PVC at runtime. The user
-# must clone the repo there once. We can't do it for them (this script may
-# run on a workstation that doesn't have the PVC mounted), but we print the
-# exact commands.
+# The image is lean (no Python deps), so the heavy `uv sync` runs here, on the
+# cluster, into a venv on the scratch PVC — it never has to survive your VPN
+# link. This needs the repo cloned on the scratch PVC already; if it isn't, the
+# bootstrap job fails fast and we print the exact clone command below.
 
-cat <<EOM
+log "bootstrapping the scratch venv on the cluster (waits until ready)…"
+BOOTSTRAP_RC=0
+bash scripts/rcp/bootstrap-venv.sh --wait || BOOTSTRAP_RC=$?
+
+if [ "${BOOTSTRAP_RC}" -eq 0 ]; then
+    cat <<EOM
 
 ────────────────────────────────────────────────────────────────────────
-[bcv-setup] DONE. Next steps:
+[bcv-setup] DONE — image pushed and scratch venv ready. Run the benchmark:
 
-1. (one-time) clone the benchmark on your light-scratch PVC. From HaaS:
-
-    ssh ${USR}@haas001.rcp.epfl.ch
-    mkdir -p /mnt/light/scratch/${USR}
-    cd /mnt/light/scratch/${USR}
-    git clone <repo-url> bcv-dev
-
-2. Run a smoke job to validate the full pipeline (~15 min):
-
-    ./scripts/rcp/submit.sh smoke
-
-3. Once green, submit the full benchmark:
-
-    ./scripts/rcp/submit.sh all
+    ./scripts/rcp/submit.sh smoke      # one cell, ~15 min, validates the chain
+    ./scripts/rcp/submit.sh all        # full benchmark
 
 Monitoring:
 
@@ -277,3 +270,30 @@ Cleanup:
     ./scripts/rcp/teardown.sh
 ────────────────────────────────────────────────────────────────────────
 EOM
+else
+    cat <<EOM
+
+────────────────────────────────────────────────────────────────────────
+[bcv-setup] Image is built and pushed, but the scratch venv is NOT confirmed
+ready (bootstrap rc=${BOOTSTRAP_RC}).
+
+Most likely cause: the repo isn't cloned on the scratch PVC yet. From HaaS:
+
+    ssh ${USR}@haas001.rcp.epfl.ch
+    mkdir -p /mnt/light/scratch/${USR}
+    cd /mnt/light/scratch/${USR}
+    git clone <repo-url> bcv-dev
+    exit
+
+Then build the venv (re-runnable, idempotent):
+
+    ./scripts/rcp/bootstrap-venv.sh --wait
+
+…and launch:
+
+    ./scripts/rcp/submit.sh all
+
+(If it just timed out, watch progress with: runai logs bcv-bootstrap -f)
+────────────────────────────────────────────────────────────────────────
+EOM
+fi

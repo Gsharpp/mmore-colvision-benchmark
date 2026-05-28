@@ -1,19 +1,31 @@
 #!/bin/bash
-# Main entrypoint — installs the benchmark package in editable mode from
-# PROJECT_ROOT_AT, then execs the user's command.
+# Main entrypoint — activates the shared scratch venv (BCV_VENV), verifies the
+# benchmark package is importable, then execs the user's command.
 #
-# When PROJECT_ROOT_AT is not set, falls back to running with whatever code
-# (if any) is baked in the image. This makes the image usable both in:
-#   - PVC / bind-mount workflows (RCP, k8s, local dev) — code lives outside
-#   - frozen-image workflows (CI / ad-hoc docker run) — code is built in
+# The heavy Python dependencies (and an editable install of the project) live
+# in a venv on the scratch PVC, created once by scripts/rcp/bootstrap-venv.sh.
+# Every job from the same image references that one venv, so jobs do NOT install
+# anything here — that avoids many concurrent jobs writing to the same NFS venv.
 #
 # Adapted from EPFLiGHT/LiGHT-cluster-template.
 set -eo pipefail
 
 PACKAGE_NAME="${PACKAGE_NAME:-benchmark_colvision}"
 
+# Activate the shared scratch venv built by bootstrap-venv.sh.
+if [ -n "${BCV_VENV:-}" ]; then
+    if [ ! -x "${BCV_VENV}/bin/python" ]; then
+        echo "[bcv-entrypoint][ERROR] BCV_VENV=${BCV_VENV} has no python interpreter." >&2
+        echo "[bcv-entrypoint][ERROR] Create it once with: ./scripts/rcp/bootstrap-venv.sh" >&2
+        exit 3
+    fi
+    echo "[bcv-entrypoint] activating scratch venv ${BCV_VENV}"
+    export VIRTUAL_ENV="${BCV_VENV}"
+    export PATH="${BCV_VENV}/bin:${PATH}"
+fi
+
 if [ -z "${PROJECT_ROOT_AT:-}" ]; then
-    echo "[bcv-entrypoint] PROJECT_ROOT_AT not set — running with image as-is."
+    echo "[bcv-entrypoint] PROJECT_ROOT_AT not set — running with environment as-is."
 else
     echo "[bcv-entrypoint] PROJECT_ROOT_AT=${PROJECT_ROOT_AT}"
     if [ ! -f "${PROJECT_ROOT_AT}/pyproject.toml" ]; then
@@ -22,11 +34,14 @@ else
         exit 2
     fi
     cd "${PROJECT_ROOT_AT}"
-    # --no-deps because all transitive deps are already in /opt/bcv/.venv from
-    # the image build. We only need to register the project's own source tree
-    # in the venv so `bcv-run`, `bcv-corpus`, etc. resolve to the live code.
-    echo "[bcv-entrypoint] installing project (editable, --no-deps)"
-    uv pip install --no-deps --quiet -e "${PROJECT_ROOT_AT}"
+    # The project was installed editable into BCV_VENV during bootstrap, so the
+    # common path is a no-op. We only (re)install if the package is missing
+    # (venv not bootstrapped, or a stale checkout) — guarding against the
+    # concurrent-write case where dozens of jobs share one venv.
+    if ! python -c "import ${PACKAGE_NAME}" 2>/dev/null; then
+        echo "[bcv-entrypoint] project not importable — installing editable (--no-deps)"
+        uv pip install --no-deps --quiet -e "${PROJECT_ROOT_AT}"
+    fi
     python -c "import ${PACKAGE_NAME}; print('[bcv-entrypoint] import OK:', ${PACKAGE_NAME}.__file__)"
 fi
 

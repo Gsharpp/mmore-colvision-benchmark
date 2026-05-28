@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.7
 #
 # User layer for the benchmark image.
 #
@@ -25,8 +24,7 @@ RUN groupadd -f -g ${GRPID} ${GRP} && \
         -u ${USRID} -g ${GRP} \
         -p "$(openssl passwd -1 ${PASSWD})" \
         ${USR} && \
-    (usermod -aG sudo ${USR} 2>/dev/null || true) && \
-    chown -R ${USR}:${GRP} /opt/bcv /opt/bcv-entrypoints
+    (usermod -aG sudo ${USR} 2>/dev/null || true)
 
 USER ${USR}
 WORKDIR /home/${USR}
