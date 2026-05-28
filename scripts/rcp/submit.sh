@@ -84,11 +84,21 @@ cmd_serve_meditron() {
 
 cmd_track_a() {
     local model="${1:-}" seed="${2:-}"
+    shift 2 2>/dev/null || true
+    # Optional: --palier <id>  (repeatable, passed through to bcv-run)
+    local palier_flags=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --palier) palier_flags="${palier_flags} --palier $2"; shift 2 ;;
+            *) warn "unknown track-a arg: $1"; shift ;;
+        esac
+    done
     if [ -n "${model}" ] && [ -n "${seed}" ]; then
         # Job names must be lowercase RFC 1123 — collapse underscores.
         local safe_model="${model//_/-}"
         submit_one "bcv-ta-${safe_model}-s${seed}" 1 \
             "bcv-run track-a --model-id ${model} --seed ${seed} \
+                ${palier_flags} \
                 --config configs/track_a.yaml --models configs/models.yaml \
                 --mmore-commit ${MMORE_CMD}"
     else

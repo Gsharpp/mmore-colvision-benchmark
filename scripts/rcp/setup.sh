@@ -142,41 +142,74 @@ fi
 ########################################################################
 # 6. Build generic + user images and push.
 
+push_with_diag() {
+    local image="$1"
+    local attempt=0
+    local max_attempts=3
+    while [ "${attempt}" -lt "${max_attempts}" ]; do
+        attempt=$((attempt + 1))
+        local tmplog
+        tmplog="$(mktemp -t bcv-push.XXXXXX)"
+        local rc=0
+        # `script -q` preserves Docker's compact in-place progress bar.
+        # -e propagates docker's exit code; </dev/null avoids input hang.
+        if command -v script >/dev/null 2>&1; then
+            script -q -e -c "docker push '${image}'" "${tmplog}" </dev/null
+            rc=$?
+        else
+            docker push "${image}" 2>&1 | tee "${tmplog}"
+            rc="${PIPESTATUS[0]}"
+        fi
+        if [ "${rc}" -eq 0 ]; then rm -f "${tmplog}"; return 0; fi
+        # Classify the failure: network drop vs auth error.
+        if grep -qiE "closed network connection|connection reset|use of closed|dial tcp|i/o timeout|EOF" "${tmplog}"; then
+            warn "push attempt ${attempt}/${max_attempts} failed (network drop). Retrying..."
+            rm -f "${tmplog}"
+            sleep 5
+            continue
+        fi
+        if grep -qiE "unauthorized|denied|401|403" "${tmplog}"; then
+            warn ""
+            warn "push denied to ${image}. Your Harbor project is probably not"
+            warn "'${HARBOR_PROJECT}'. Check https://${REGISTRY}/ for the project"
+            warn "name where you have Developer/Maintainer/Project Admin role, then re-run with:"
+            warn "    HARBOR_PROJECT=<your-project-name> $0"
+            rm -f "${tmplog}"
+            return 1
+        fi
+        warn "push failed (attempt ${attempt}/${max_attempts}):"
+        sed 's/^/    /' "${tmplog}" >&2
+        rm -f "${tmplog}"
+        return 1
+    done
+    warn "push failed after ${max_attempts} attempts (persistent network error)."
+    return 1
+}
+
 log "building generic image (this can take ~10 min on first run)..."
 IMAGE_NAME="${IMAGE_REPO}" GENERIC_TAG="${GENERIC_TAG}" \
     bash docker/build-generic.sh
 
-# Push the freshly built generic so the registry stays in sync. Other users in
-# the same lab can then reuse it without rebuilding the heavy CUDA + uv stack.
-push_with_diag() {
-    local image="$1"
-    local log="$(mktemp -t bcv-push.XXXXXX)"
-    # `script -q` gives docker push a pseudo-TTY so it keeps its compact
-    # in-place progress display (instead of one line per status update when
-    # piped through `tee`). The typescript file still captures everything for
-    # 401/403 detection. -e propagates docker's exit code.
-    local rc=0
-    if command -v script >/dev/null 2>&1; then
-        script -q -e -c "docker push '${image}'" "${log}" </dev/null
-        rc=$?
-    else
-        docker push "${image}" 2>&1 | tee "${log}"
-        rc="${PIPESTATUS[0]}"
-    fi
-    if [ "${rc}" -eq 0 ]; then rm -f "${log}"; return 0; fi
-    if grep -qiE "unauthorized|denied|401|403" "${log}"; then
-        warn ""
-        warn "push denied to ${image}. Your Harbor project is probably not"
-        warn "'${HARBOR_PROJECT}'. Check https://${REGISTRY}/ for the project"
-        warn "name where you have Developer/Maintainer/Project Admin role, then re-run with:"
-        warn "    HARBOR_PROJECT=<your-project-name> $0"
-    fi
-    rm -f "${log}"
-    return 1
+# Skip the generic push when it was already pushed and Docker holds its
+# RepoDigest (set after a successful push, stable across all-cache rebuilds).
+# Force a re-push with FORCE_GENERIC_PUSH=1.
+_generic_already_pushed() {
+    [ "${FORCE_GENERIC_PUSH:-0}" = "1" ] && return 1
+    local digests
+    digests=$(docker image inspect "${IMAGE_GEN}" \
+        --format '{{range .RepoDigests}}{{.}}{{"\n"}}{{end}}' 2>/dev/null || true)
+    echo "${digests}" | grep -q "^${REGISTRY}/" || return 1
+    docker manifest inspect "${IMAGE_GEN}" >/dev/null 2>&1 || return 1
+    return 0
 }
 
-log "pushing ${IMAGE_GEN}..."
-push_with_diag "${IMAGE_GEN}" || fail "docker push generic failed."
+if _generic_already_pushed; then
+    log "generic image already in registry (RepoDigest present) — skipping push."
+    log "  use FORCE_GENERIC_PUSH=1 to override."
+else
+    log "pushing ${IMAGE_GEN}..."
+    push_with_diag "${IMAGE_GEN}" || fail "docker push generic failed."
+fi
 
 log "building user image..."
 IMAGE_NAME="${IMAGE_REPO}" GENERIC_TAG="${GENERIC_TAG}" USR_TAG="${USR_TAG}" \
