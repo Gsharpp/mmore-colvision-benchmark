@@ -12,6 +12,8 @@ entry — re-runs are idempotent.
 
 from __future__ import annotations
 
+import csv
+import io
 import tarfile
 import time
 from collections.abc import Iterable, Iterator
@@ -36,18 +38,14 @@ class PmcPackage:
         return PMC_OA_PACKAGE_BASE + self.relative_path
 
 
-def iter_package_index(
-    raw_csv: str,
-    pmcid_filter: set[str] | None = None,
+def _rows_to_packages(
+    rows: Iterator[list[str]],
+    pmcid_filter: set[str] | None,
 ) -> Iterator[PmcPackage]:
-    """Parse the oa_file_list.csv format and yield packages.
-
-    Columns: File, Article Citation, Accession ID, Last Updated, PMID, License.
-    """
-    lines = raw_csv.splitlines()
-    if not lines:
+    """Shared row→PmcPackage logic for the in-memory and streaming parsers."""
+    header = next(rows, None)
+    if header is None:
         return
-    header = lines[0].split(",")
     try:
         col_file = header.index("File")
         col_pmcid = header.index("Accession ID")
@@ -56,11 +54,9 @@ def iter_package_index(
         # The file format has been stable for years, but if columns shift
         # we'd rather fail loudly than silently return nothing.
         raise ValueError(f"unexpected PMC OA index header: {header}") from None
-    for line in lines[1:]:
-        if not line.strip():
-            continue
-        parts = line.split(",")
-        if len(parts) <= max(col_file, col_pmcid, col_license):
+    wide = max(col_file, col_pmcid, col_license)
+    for parts in rows:
+        if len(parts) <= wide:
             continue
         pmcid = parts[col_pmcid].strip()
         if pmcid_filter is not None and pmcid not in pmcid_filter:
@@ -72,9 +68,37 @@ def iter_package_index(
         )
 
 
+def iter_package_index(
+    raw_csv: str,
+    pmcid_filter: set[str] | None = None,
+) -> Iterator[PmcPackage]:
+    """Parse the oa_file_list.csv text and yield packages.
+
+    Columns: File, Article Citation, Accession ID, Last Updated, PMID, License.
+    The Article Citation field is double-quoted and contains commas, so we parse
+    with the csv module rather than a naive split.
+    """
+    yield from _rows_to_packages(iter(csv.reader(io.StringIO(raw_csv))), pmcid_filter)
+
+
+def stream_package_index(
+    client: httpx.Client,
+    pmcid_filter: set[str] | None = None,
+) -> Iterator[PmcPackage]:
+    """Stream the OA index line by line (memory-safe for the multi-GB file)."""
+    with client.stream("GET", PMC_OA_INDEX_URL, timeout=300.0) as resp:
+        resp.raise_for_status()
+        rows = csv.reader(resp.iter_lines())
+        yield from _rows_to_packages(rows, pmcid_filter)
+
+
 def fetch_index(client: httpx.Client) -> str:
-    """Download the PMC OA file list CSV (~tens of MB)."""
-    resp = client.get(PMC_OA_INDEX_URL, timeout=60.0)
+    """Download the full PMC OA file list CSV into memory.
+
+    The list has grown to the GB range; prefer ``stream_package_index`` when you
+    only need to sample. Kept for callers that want the raw text.
+    """
+    resp = client.get(PMC_OA_INDEX_URL, timeout=300.0)
     resp.raise_for_status()
     return resp.text
 
@@ -143,6 +167,45 @@ def parse_mesh_terms_from_nxml(nxml_text: str) -> list[str]:
     return tags
 
 
+def sample_pmcids(
+    n: int,
+    *,
+    seed: int = 0,
+    scan_limit: int | None = 400_000,
+    client: httpx.Client | None = None,
+) -> list[str]:
+    """Reservoir-sample ``n`` valid PMCIDs by streaming the OA index.
+
+    Memory-safe (never holds the whole index). ``scan_limit`` caps how many rows
+    are scanned; the sample is uniform over the scanned prefix.
+    """
+    import random
+
+    rng = random.Random(seed)
+    owns_client = client is None
+    client = client or httpx.Client(follow_redirects=True)
+    reservoir: list[str] = []
+    kept = 0
+    try:
+        for i, pkg in enumerate(stream_package_index(client)):
+            pid = pkg.pmcid
+            if not (pid.startswith("PMC") and pid[3:].isdigit()):
+                continue
+            kept += 1
+            if len(reservoir) < n:
+                reservoir.append(pid)
+            else:
+                j = rng.randint(0, kept - 1)
+                if j < n:
+                    reservoir[j] = pid
+            if scan_limit is not None and i >= scan_limit:
+                break
+        return reservoir
+    finally:
+        if owns_client:
+            client.close()
+
+
 def download_corpus(
     pmcids: Iterable[str],
     cache_dir: Path,
@@ -154,11 +217,16 @@ def download_corpus(
     client = client or httpx.Client(follow_redirects=True)
     pmc_set = set(pmcids)
     try:
-        index_csv = fetch_index(client)
         pdfs: list[Path] = []
-        for pkg in iter_package_index(index_csv, pmcid_filter=pmc_set):
+        found: set[str] = set()
+        # Stream the index instead of loading the multi-GB CSV into memory; stop
+        # as soon as every requested PMCID has been located.
+        for pkg in stream_package_index(client, pmcid_filter=pmc_set):
             archive = download_package(pkg, cache_dir, client)
             pdfs.extend(extract_pdfs(archive, pdf_out_dir))
+            found.add(pkg.pmcid)
+            if found >= pmc_set:
+                break
         return pdfs
     finally:
         if owns_client:

@@ -78,6 +78,25 @@ def download_pmc(pmcids: tuple[str, ...], cache_dir: Path, out_dir: Path) -> Non
     click.echo(f"extracted {len(pdfs)} PDFs to {out_dir}")
 
 
+@main.command("sample-pmc")
+@click.option("--n", type=int, default=60, show_default=True, help="How many PMCIDs to sample")
+@click.option("--seed", type=int, default=0, show_default=True)
+@click.option("--scan-limit", type=int, default=400_000, show_default=True,
+              help="Cap rows scanned from the OA index")
+@click.option("--out", type=click.Path(path_type=Path), default=None,
+              help="Write space-separated PMCIDs here (also echoed to stdout)")
+def sample_pmc(n: int, seed: int, scan_limit: int, out: Path | None) -> None:
+    """Reservoir-sample valid PMCIDs from the PMC OA index (memory-safe stream)."""
+    from benchmark_colvision.corpus.pmc_downloader import sample_pmcids
+
+    ids = sample_pmcids(n, seed=seed, scan_limit=scan_limit)
+    text = " ".join(ids)
+    if out is not None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(text)
+    click.echo(text)
+
+
 @main.command("build-manifest")
 @click.argument("pdf_root", type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.option("--out", type=click.Path(path_type=Path), required=True, help="Manifest JSON output path")
