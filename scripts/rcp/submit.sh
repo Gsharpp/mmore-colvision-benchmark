@@ -64,9 +64,20 @@ submit_one() {
     if [ -n "${PVC_HOME:-}" ]; then
         args+=(--existing-pvc "claimname=${PVC_HOME},path=/home/${USR}")
     fi
+    # Forward a Hugging Face token for gated models (e.g. epfl-llm/meditron-70b,
+    # the Llama-2-derived judge). Read from the caller's env so the secret never
+    # lives in the repo: `export HF_TOKEN=hf_xxx` before submitting.
+    if [ -n "${HF_TOKEN:-}" ]; then
+        args+=(-e HF_TOKEN="${HF_TOKEN}" -e HUGGING_FACE_HUB_TOKEN="${HF_TOKEN}")
+    fi
 
+    # No --command: that would override the image ENTRYPOINT and skip the venv
+    # activation in docker/entrypoints/entrypoint.sh (so `vllm`, `bcv-run` etc.
+    # wouldn't be on PATH). Passing args without --command sends them THROUGH the
+    # entrypoint, which activates BCV_VENV then execs the command. Plain `bash -c`
+    # (not `-lc`) so a login shell doesn't reset the PATH the entrypoint set.
     echo "[bcv-submit] runai submit ${name} (gpus=${gpus})"
-    runai submit "${args[@]}" --command -- bash -lc "${cmd}"
+    runai submit "${args[@]}" -- bash -c "${cmd}"
 }
 
 ########################################################################

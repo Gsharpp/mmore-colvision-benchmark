@@ -58,7 +58,9 @@ def _detect_language_for(pdf_path: Path, *, language_override: str | None) -> st
             text = "".join(page.get_text() for page in doc[:2])[:4000]
     except Exception:
         return "unknown"
-    return detect_language(text)
+    # detect_language returns None on too-short / image-only pages; PdfEntry
+    # requires a string, so coalesce to the same sentinel used on hard failures.
+    return detect_language(text) or "unknown"
 
 
 def build_manifest(

@@ -23,8 +23,13 @@ from xml.etree import ElementTree as ET
 
 import httpx
 
-PMC_OA_INDEX_URL = "https://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_package/oa_file_list.csv"
-PMC_OA_PACKAGE_BASE = "https://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_package/"
+# NCBI moved the legacy bulk artefacts under /pub/pmc/deprecated/ in early 2026
+# (scheduled for removal in August 2026). The OA file list and the per-article
+# tar.gz packages both live there. The index's "File" column already carries the
+# "oa_package/<xx>/<yy>/PMCID.tar.gz" prefix, so PMC_OA_PACKAGE_BASE must stop at
+# the deprecated/ directory — otherwise the path doubles up.
+PMC_OA_INDEX_URL = "https://ftp.ncbi.nlm.nih.gov/pub/pmc/deprecated/oa_file_list.csv"
+PMC_OA_PACKAGE_BASE = "https://ftp.ncbi.nlm.nih.gov/pub/pmc/deprecated/"
 
 
 @dataclass
