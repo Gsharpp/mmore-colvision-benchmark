@@ -172,24 +172,25 @@ def parse_mesh_terms_from_nxml(nxml_text: str) -> list[str]:
     return tags
 
 
-def sample_pmcids(
+def sample_packages(
     n: int,
     *,
     seed: int = 0,
     scan_limit: int | None = 400_000,
     client: httpx.Client | None = None,
-) -> list[str]:
-    """Reservoir-sample ``n`` valid PMCIDs by streaming the OA index.
+) -> list[PmcPackage]:
+    """Reservoir-sample ``n`` PmcPackage objects by streaming the OA index once.
 
-    Memory-safe (never holds the whole index). ``scan_limit`` caps how many rows
-    are scanned; the sample is uniform over the scanned prefix.
+    Returning full PmcPackage objects (not just IDs) lets callers skip
+    re-streaming the index during download — critical on slow cluster networks.
+    Memory-safe; ``scan_limit`` caps how many index rows are scanned.
     """
     import random
 
     rng = random.Random(seed)
     owns_client = client is None
     client = client or httpx.Client(follow_redirects=True)
-    reservoir: list[str] = []
+    reservoir: list[PmcPackage] = []
     kept = 0
     try:
         for i, pkg in enumerate(stream_package_index(client)):
@@ -198,14 +199,46 @@ def sample_pmcids(
                 continue
             kept += 1
             if len(reservoir) < n:
-                reservoir.append(pid)
+                reservoir.append(pkg)
             else:
                 j = rng.randint(0, kept - 1)
                 if j < n:
-                    reservoir[j] = pid
+                    reservoir[j] = pkg
             if scan_limit is not None and i >= scan_limit:
                 break
         return reservoir
+    finally:
+        if owns_client:
+            client.close()
+
+
+def sample_pmcids(
+    n: int,
+    *,
+    seed: int = 0,
+    scan_limit: int | None = 400_000,
+    client: httpx.Client | None = None,
+) -> list[str]:
+    """Compatibility shim — returns PMCIDs only. Prefer sample_packages."""
+    return [p.pmcid for p in sample_packages(n, seed=seed, scan_limit=scan_limit, client=client)]
+
+
+def download_packages(
+    packages: Iterable[PmcPackage],
+    cache_dir: Path,
+    pdf_out_dir: Path,
+    client: httpx.Client | None = None,
+) -> list[Path]:
+    """Download pre-resolved PmcPackage objects (no index re-streaming needed)."""
+    owns_client = client is None
+    client = client or httpx.Client(follow_redirects=True)
+    try:
+        pdfs: list[Path] = []
+        for pkg in packages:
+            archive = download_package(pkg, cache_dir, client)
+            pdfs.extend(extract_pdfs(archive, pdf_out_dir))
+            print(f"[pmc] extracted {pkg.pmcid}", flush=True)
+        return pdfs
     finally:
         if owns_client:
             client.close()

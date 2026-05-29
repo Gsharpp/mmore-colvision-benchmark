@@ -85,16 +85,38 @@ def download_pmc(pmcids: tuple[str, ...], cache_dir: Path, out_dir: Path) -> Non
               help="Cap rows scanned from the OA index")
 @click.option("--out", type=click.Path(path_type=Path), default=None,
               help="Write space-separated PMCIDs here (also echoed to stdout)")
-def sample_pmc(n: int, seed: int, scan_limit: int, out: Path | None) -> None:
+@click.option("--packages-out", type=click.Path(path_type=Path), default=None,
+              help="Write full package metadata as JSON (avoids re-streaming index on download)")
+def sample_pmc(n: int, seed: int, scan_limit: int, out: Path | None, packages_out: Path | None) -> None:
     """Reservoir-sample valid PMCIDs from the PMC OA index (memory-safe stream)."""
-    from benchmark_colvision.corpus.pmc_downloader import sample_pmcids
+    from benchmark_colvision.corpus.pmc_downloader import sample_packages
 
-    ids = sample_pmcids(n, seed=seed, scan_limit=scan_limit)
-    text = " ".join(ids)
+    pkgs = sample_packages(n, seed=seed, scan_limit=scan_limit)
+    text = " ".join(p.pmcid for p in pkgs)
     if out is not None:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(text)
+    if packages_out is not None:
+        packages_out.parent.mkdir(parents=True, exist_ok=True)
+        packages_out.write_text(
+            json.dumps([{"pmcid": p.pmcid, "relative_path": p.relative_path, "license": p.license} for p in pkgs], indent=2)
+        )
     click.echo(text)
+
+
+@main.command("download-packages")
+@click.option("--packages-json", type=click.Path(exists=True, path_type=Path), required=True,
+              help="JSON produced by sample-pmc --packages-out (no index re-stream needed)")
+@click.option("--cache-dir", type=click.Path(path_type=Path), required=True)
+@click.option("--out-dir", type=click.Path(path_type=Path), required=True)
+def download_packages_cmd(packages_json: Path, cache_dir: Path, out_dir: Path) -> None:
+    """Download PMC packages using pre-resolved paths (skips index streaming)."""
+    from benchmark_colvision.corpus.pmc_downloader import PmcPackage, download_packages
+
+    raw = json.loads(packages_json.read_text())
+    pkgs = [PmcPackage(pmcid=r["pmcid"], relative_path=r["relative_path"], license=r["license"]) for r in raw]
+    pdfs = download_packages(pkgs, cache_dir=cache_dir, pdf_out_dir=out_dir)
+    click.echo(f"extracted {len(pdfs)} PDFs to {out_dir}")
 
 
 @main.command("build-manifest")
