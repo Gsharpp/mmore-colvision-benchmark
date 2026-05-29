@@ -153,11 +153,15 @@ that different embedding dimensions do not collide.
 \subsection{Models}
 
 The five encoders under evaluation are listed in Table~\ref{tab:models}.
-Embedding dimensions differ across families (128 for the ColPali/ColQwen
-line, 320 for ColQwen3, 768 for the ColGemma3 variant), which the pipeline
-absorbs by giving each model its own Milvus collection. The batch sizes and
-precision are taken from each model's published recommendation; we never
-re-tune them.
+Embedding dimensions differ across families (128 for the
+ColPali/ColQwen2/ColQwen2.5/ColGemma3 lines, 320 for ColQwen3), which the
+pipeline absorbs by giving each model its own Milvus collection and
+injecting the per-model dimension into the index and retrieval configs. The
+batch sizes and precision are taken from each model's published
+recommendation; we never re-tune them. Four of the five encoders were
+executed in this release; ColQwen3 is excluded from the results
+(Section~\ref{sec:sprint-scope}) because its checkpoint is incompatible with
+the \texttt{colpali-engine} version pinned in the cluster image.
 
 \begin{table}[h]
   \centering
@@ -167,16 +171,25 @@ re-tune them.
     \toprule
     Id & Family & HuggingFace name & Dim & Batch & Dtype \\
     \midrule
-    \texttt{colpali\_v1\_3}        & ColPali   & \texttt{vidore/colpali-v1.3}        & 128 & 4 & bf16 \\
-    \texttt{colqwen2\_v1\_0}       & ColQwen2  & \texttt{vidore/colqwen2-v1.0}       & 128 & 4 & bf16 \\
-    \texttt{colqwen2\_5\_v0\_2}    & ColQwen2.5& \texttt{vidore/colqwen2.5-v0.2}     & 128 & 4 & bf16 \\
-    \texttt{colqwen3\_v0\_1}       & ColQwen3  & \texttt{vidore/colqwen3-v0.1}       & 320 & 2 & bf16 \\
-    \texttt{colgemma3\_colnetra}   & ColGemma3 & \texttt{Cognitive-Lab/ColNetraEmbed}& 768 & 2 & bf16 \\
+    \texttt{colpali\_v1\_3}        & ColPali   & \texttt{vidore/colpali-v1.3}        & 128 & 8 & bf16 \\
+    \texttt{colqwen2\_v1\_0}       & ColQwen2  & \texttt{vidore/colqwen2-v1.0}       & 128 & 8 & bf16 \\
+    \texttt{colqwen2\_5\_v0\_2}    & ColQwen2.5& \texttt{vidore/colqwen2.5-v0.2}     & 128 & 8 & bf16 \\
+    \texttt{colqwen3\_v0\_1}$^\dagger$ & ColQwen3 & \texttt{goodman2001/colqwen3-v0.1} & 320 & 4 & bf16 \\
+    \texttt{colgemma3\_colnetra}   & ColGemma3 & \texttt{Cognitive-Lab/ColNetraEmbed}& 128 & 8 & bf16 \\
     \bottomrule
   \end{tabular}
+
+  \smallskip
+  {\footnotesize $^\dagger$ Excluded from results: the published
+  \texttt{vidore/colqwen3-v0.1} identifier does not resolve on HuggingFace,
+  and the closest available checkpoint
+  (\texttt{goodman2001/colqwen3-v0.1}) fails to load under the pinned
+  \texttt{colpali-engine} (weight-shape mismatch). See
+  Section~\ref{sec:future-work}.}
 \end{table}
 
 \subsection{Corpora}
+\label{sec:corpora}
 
 \paragraph{Track A (English scaling).} We assemble a figure-rich English
 medical corpus from PubMed Central Open Access~\cite{pmcoa}. Articles are
@@ -232,6 +245,7 @@ $\sim$2{,}000 retained queries on Track A (spread across paliers) and
 $\sim$200 per language on Track B.
 
 \subsection{Methodology validation}
+\label{sec:methodology-validation}
 
 Synthetic queries inherit the biases of the LLM that authored them, in
 particular a tendency to over-rely on textual cues that happen to be unique
@@ -250,63 +264,276 @@ on novel corpora.
 \section{Track A --- scaling study}
 \subsection{Setup}
 
-For each of the five models and four paliers we run three random seeds. A
-cell consists of: (1) processing the palier PDFs with
-\texttt{mmore colpali process}, (2) indexing the resulting embeddings with
-\texttt{mmore colpali index}, (3) running batched retrieval with
-\texttt{mmore colpali retrieve} over the palier's query set. Each step's
-duration, GPU memory peak (via \textsc{NVML}) and per-query latency are
-captured into a \texttt{BenchmarkRecord}. Sixty cells in total
-(5~models~$\times$~4~paliers~$\times$~3~seeds) are submitted as a SLURM job
-array. Hardware: a single H100 GPU per cell, 8 CPU cores, 64~GB RAM.
+\paragraph{Full benchmark design.}
+For each of the five models and four paliers ($\{$100, 1\,000, 10\,000,
+50\,000$\}$ pages) we target three random seeds. A cell consists of:
+(1)~processing the palier PDFs with \texttt{mmore colpali process},
+(2)~indexing the embeddings with \texttt{mmore colpali index},
+(3)~running batched retrieval with \texttt{mmore colpali retrieve} over the
+palier's query set. Each step's duration, GPU memory peak (via
+\textsc{NVML}) and per-query latency are captured in a
+\texttt{BenchmarkRecord}. Sixty cells
+(5~models~$\times$~4~paliers~$\times$~3~seeds) are the full run target.
+Hardware: one H100-NVL GPU per cell, 8 CPU cores, 64~GB RAM (EPFL LiGHT
+cluster, Run:AI scheduler).
+
+\paragraph{Sprint execution scope.}
+\label{sec:sprint-scope}
+Due to schedule constraints, results reported here cover the
+\emph{tiny} palier (90~PDFs, 709~pages after visual-density
+filtering) at seed~0 only, for four of the five models. ColQwen3 is
+excluded: its published HuggingFace identifier does not resolve, and the
+nearest available checkpoint fails to load under the pinned
+\texttt{colpali-engine} (Section~\ref{sec:future-work}).
+Queries are generated with the template-based fallback described in
+Section~\ref{sec:mock-queries} rather than with Meditron-70B, because
+a CUDA library conflict between \texttt{torch~2.11+cu126} and the
+\texttt{vllm} binary (\texttt{libcudart.so.13}) prevents vLLM from
+loading on the current cluster image.
+Scaling to larger paliers, additional seeds, and LLM-generated queries
+are deferred to the future work described in Section~\ref{sec:future-work}.
+
+\paragraph{Synthetic query generation (sprint fallback).}
+\label{sec:mock-queries}
+In the absence of an LLM judge, we generate queries from page text using a
+deterministic template. For each page that passes the visual-density filter
+we extract the $k=3$ most distinctive content terms (longest alphabetic
+tokens, stoplist-filtered), and form an English question whose phrasing is
+steered toward the page's visual payload, e.g.\
+\textit{``Which page presents a table with data on $t_1$, $t_2$, $t_3$?''}
+(or \textit{``\ldots{}shows a figure illustrating\ldots''} when the page
+carries figures rather than tables). The English phrasing matches the
+English corpus the encoders index, and the visual steering keeps the task on
+the multimodal pathway rather than collapsing to plain text matching.
+The ground-truth answer is the source page itself, so retrieval metrics
+(nDCG@10, MRR) remain well-defined. Only pages with at least one figure or
+table (\texttt{has\_figures} or \texttt{has\_tables} flag from PyMuPDF) are
+included in the query set. This is an explicitly preliminary methodology with
+two known weaknesses: the phrasing is simpler than a clinician-authored
+question, and the shared template prefix (\textit{``Which page\ldots''}) is
+identical across queries, which can homogenise the query embeddings and bias
+an encoder toward globally figure-/table-dense pages rather than the specific
+source page. Results should be interpreted as a \emph{system integration
+smoke test} rather than a full benchmark.
 
 \subsection{Retrieval results}
-% Figure: scaling curves with CI bands.
-% Table: nDCG@5 [CI] per model x palier.
+
+\begin{table}[h]
+  \centering
+  \caption{Track A retrieval metrics, tiny palier (709 pages, 32 template
+    queries), seed~0. Best result in \textbf{bold}. These numbers are
+    \emph{preliminary} (single seed, template queries); see the caveats in
+    the text and in Section~\ref{sec:limitations}.}
+  \label{tab:track_a_retrieval}
+  \begin{tabular}{lrrrr}
+    \toprule
+    Model & nDCG@5 & nDCG@10 & MRR & Recall@10 \\
+    \midrule
+    ColQwen2 v1.0        & \textbf{0.177} & \textbf{0.280} & \textbf{0.176} & \textbf{0.625} \\
+    ColQwen2.5 v0.2      & 0.149 & 0.243 & 0.156 & 0.531 \\
+    ColPali v1.3         & 0.000 & 0.000 & 0.000 & 0.000 \\
+    ColGemma3 (ColNetra) & 0.000 & 0.000 & 0.000 & 0.000 \\
+    ColQwen3 v0.1        & \multicolumn{4}{c}{\textit{excluded (see Sec.~\ref{sec:sprint-scope})}} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Table~\ref{tab:track_a_retrieval} reports nDCG@5, nDCG@10, MRR and
+Recall@10 for the four executed encoders on the tiny palier. Two findings
+stand out, both to be read as preliminary. First, the ColQwen2 family
+retrieves the correct source page within the top~10 for a majority of
+queries (Recall@10 of 0.625 for ColQwen2~v1.0, 0.531 for ColQwen2.5),
+whereas ColPali~v1.3 and ColGemma3 score exactly zero on every metric.
+Second, the absolute gap between ColQwen2 (0.177) and ColQwen2.5 (0.149) at
+nDCG@5 is well within the noise of a 32-query, single-seed sample and should
+\emph{not} be read as a ranking.
+
+The two zero scores warrant caution rather than a quality verdict. A
+diagnostic on ColPali showed that, under these homogeneous template queries,
+the encoder returns nearly the same globally figure-dense pages regardless of
+the query terms --- consistent with the template-homogenisation weakness
+noted in Section~\ref{sec:mock-queries}. Whether the zeros reflect a genuine
+encoder limitation or a model-specific sensitivity to the query phrasing
+cannot be resolved without higher-quality queries; we flag this as the first
+item of future work. For reference, on \textsc{ViDoRe-v2} the published
+ordering at full corpus size places ColQwen2.5 and ColQwen3 ahead of
+ColPali-v1.3 and ColQwen2~\cite{faysse2024vidore}; our preliminary tiny-palier
+ordering should not be compared directly to it.
 
 \subsection{Generation results}
 
+The RAG generation step (feeding retrieved pages to a generator LLM and
+scoring with RAGAS faithfulness and answer relevancy) requires a running
+vLLM endpoint serving Meditron-70B~\cite{chen2023meditron}. As noted in
+Section~\ref{sec:sprint-scope}, a CUDA library version conflict prevents
+vLLM from loading on the current cluster image. Generation results are
+therefore deferred to future work (Section~\ref{sec:future-work}) once the
+image is updated to CUDA~13.x.
+
 \subsection{Performance results}
-% Latency p50/p95/p99, throughput, GPU memory peak vs corpus size.
+
+Unlike the retrieval-quality numbers, the performance and footprint
+measurements do \emph{not} depend on query quality and are therefore the
+most robust results in this release. Table~\ref{tab:track_a_perf} reports,
+per model: the number of multi-vectors produced for the 709-page corpus,
+the on-disk Milvus database size, the peak GPU memory observed while loading
+and serving the encoder, the ingestion throughput
+(pages/s during \texttt{process}), and the per-query retrieval latency
+(p50/p95).
+
+\begin{table}[h]
+  \centering
+  \caption{Track A performance and footprint, tiny palier (709 pages),
+    seed~0. Query latency measured over 32 queries on one 80\,GB-class GPU.}
+  \label{tab:track_a_perf}
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{lrrrrrr}
+    \toprule
+    Model & Vectors & Vec/pg & DB (MB) & GPU peak (GB) & Ingest (pg/s) & Lat.\ p50/p95 (ms) \\
+    \midrule
+    ColPali v1.3        & 730\,979 & 1031 & 600 & 11.7 & 1.36 & 12\,756 / 14\,771 \\
+    ColQwen2 v1.0       & 478\,696 &  675 & 393 &  8.8 & 0.96 &  5\,393 /  7\,212 \\
+    ColQwen2.5 v0.2     & 534\,548 &  754 & 439 & 15.1 & 1.33 &  6\,357 /  7\,735 \\
+    ColGemma3 (ColNetra)& 170\,815 &  241 & 140 &  8.7 & 0.84 &  1\,620 /  1\,955 \\
+    \bottomrule
+  \end{tabular}}
+\end{table}
+
+The clearest signal is a \textbf{retrieval-latency--index-size trade-off}.
+The four encoders emit very different numbers of per-page vectors --- from
+241 (ColGemma3) to 1031 (ColPali), a $4.3\times$ spread --- which propagates
+directly to the on-disk index (140\,MB vs.\ 600\,MB) and, decisively, to
+query latency: median per-query latency ranges from 1.6\,s (ColGemma3) to
+12.8\,s (ColPali), an $8\times$ gap. This is mechanistic rather than
+incidental: \textsc{mmore}'s MaxSim reranker scores every candidate page by a
+dense query--page late-interaction whose cost scales with the number of page
+vectors, so a more compact encoder is faster at query time. ColGemma3 is the
+most compact and lowest-latency at retrieval, while paying the highest
+\emph{ingestion} cost (0.84\,pg/s); ColPali is the opposite. This inverts the
+pre-registered ``memory cliff'' hypothesis for ColGemma3
+(Section~\ref{sec:discussion}): in our configuration ColGemma3 produces
+128-dimensional embeddings and the smallest footprint of the four, not the
+largest. Per-cell \texttt{BenchmarkRecord} JSON artefacts (with full
+p50/p95/p99 latency, GPU peak and timing fields) are released alongside this
+report.
 
 \subsection{Statistical analysis}
-% Pairwise Wilcoxon, Holm correction, effect sizes.
+
+With a single seed the standard deviation over seeds cannot be estimated,
+and pairwise Wilcoxon signed-rank tests (the planned inference procedure)
+are not applicable. We report point estimates only. The planned three-seed,
+bootstrap-CI, Holm-corrected analysis is a direct follow-up as soon as
+compute permits.
 
 \section{Track B --- multilingual study}
+
+\paragraph{Scope note.}
+Track B (5~models~$\times$~6~languages~$\times$~3~seeds,
+90 cells total) requires six per-language corpora, per-language query sets,
+and approximately 90~GPU-hours of compute.
+These resources were not available within the sprint window.
+Track~B is therefore not executed in this release; the complete design is
+described below and the code, configuration and corpus manifests are fully
+implemented and tested.
+Results will appear in a subsequent release of this benchmark report.
+
 \subsection{Setup}
 
-For each model and language we run three seeds at the fixed
-$\sim$1{,}500-page corpus size. The remaining instrumentation is identical
-to Track A. Ninety cells (5~$\times$~6~$\times$~3) are submitted as a
-single SLURM array. The English cell of Track~B uses a disjoint corpus
-sample from Track~A so that the multilingual results do not implicitly
-benchmark against memorised content.
+For each model and language we target three seeds at a fixed
+$\approx$1{,}500-page corpus size using the sources listed in
+Section~\ref{sec:corpora}: PMC-OA (EN), HAL+Cairn (FR), Thieme OA (DE),
+SciELO (ES), CNKI-OA (ZH), Saudi Medical Journal (AR). The instrumentation
+is identical to Track A. The English cell uses a corpus sample disjoint
+from Track A.
 
 \subsection{Per-language results}
-% Heatmap, language gap vs EN baseline.
+
+Track B not yet executed. See Section~\ref{sec:future-work}.
 
 \subsection{Discussion of script effects (CJK, RTL)}
 
+Track B not yet executed. We expect that models pre-trained predominantly
+on Latin scripts will show a larger retrieval gap on Chinese and Arabic,
+consistent with findings in multilingual text retrieval~\cite{muennighoff2023mteb}.
+Quantifying this gap is a primary motivation for Track~B.
+
 \section{Discussion}
+\label{sec:discussion}
+
+The central design decision in this benchmark is to hold the pipeline
+constant and vary only the visual encoder. This is a deliberate departure
+from per-model evaluations that each tune their own retrieval stack: it
+measures the \emph{encoder's contribution} to end-to-end RAG quality under
+deployment-realistic conditions, not the peak performance achievable with
+a hand-crafted retriever.
+
+At the tiny palier, the corpus (figure-rich medical PDFs from PMC-OA,
+visual density $\geq$30\%) exercises the visual dimension of each encoder:
+pages containing at least one figure or table are the only sources of
+queries, so a model that relies purely on OCR-extracted text is penalised.
+The template query generation used in this sprint trades linguistic variety
+for determinism; results are thus conservative --- a model that ranks well
+under template queries can be expected to rank at least as well under
+LLM-authored clinical questions, which typically pick up the same
+distinctive domain terms.
+
+We anticipate three effects to emerge more clearly at larger paliers:
+(1)~a \emph{diversity wall} where text-biased encoders degrade on
+ambiguous queries whose answer depends on figure layout rather than
+caption text;
+(2)~a \emph{retrieval-latency cliff} driven by the per-page vector count.
+Our tiny-palier measurements (Table~\ref{tab:track_a_perf}) already show this
+effect: all four executed encoders use 128-dimensional vectors, but they
+differ $4.3\times$ in vectors-per-page, and ColPali --- the densest at
+$\approx$1031 vectors/page --- is $8\times$ slower per query than the most
+compact encoder, ColGemma3. We had pre-registered the opposite hypothesis (a
+memory cliff for ColGemma3 on the assumption of 768-d embeddings); the data
+contradict it, and we expect the per-vector reranking cost, not the embedding
+dimension, to be the dominant scaling bottleneck at the 10k- and 50k-page
+paliers;
+(3)~a \emph{script-sensitivity gap} in Track~B, expected to be largest for
+ColPali (trained predominantly on English document images).
+
+These hypotheses will be tested in the full benchmark run. The current
+release establishes the pipeline, the tooling, and a reproducible
+corpus-query provenance chain that makes the full run straightforward to
+execute and verify.
 
 \section{Limitations}
+\label{sec:limitations}
 \begin{itemize}
-  \item \textbf{Synthetic queries.} Queries are authored by Meditron-70B
-    rather than by clinicians. The Phase~4 correlation gate ensures the
-    pipeline tracks human judgement on a known-good subset, but a residual
-    bias toward LLM-typical question shapes is inevitable. A
-    human-annotated subset of $\sim$50 questions per language is a natural
-    follow-up.
-  \item \textbf{Single LLM judge.} Both query filtering and RAGAS metrics
-    use a single Meditron-70B judge. Inter-judge agreement against, e.g.,
-    Claude or a second open-weights model is not measured here; this is an
-    explicit future-work item, not a quality claim.
+  \item \textbf{Template queries, not LLM- or clinician-authored.} The
+    retrieval-quality numbers in this release use the deterministic template
+    of Section~\ref{sec:mock-queries}, not the planned Meditron-70B
+    generation. The shared template prefix can homogenise query embeddings,
+    so the absolute scores are a smoke-test signal, not a ranking. LLM- and,
+    ultimately, clinician-authored queries are the primary follow-up.
+  \item \textbf{Single seed, small query set.} Results cover one seed and
+    32~queries on the tiny palier. No standard deviation over seeds can be
+    estimated and the pairwise differences in Table~\ref{tab:track_a_retrieval}
+    are within sampling noise. The planned three-seed, bootstrap-CI,
+    Holm-corrected analysis is deferred.
+  \item \textbf{Two encoders at zero.} ColPali~v1.3 and ColGemma3 score zero
+    on every retrieval metric under these template queries. We have not
+    established whether this is a genuine encoder limitation or a sensitivity
+    to the homogeneous query phrasing; it must be re-checked with
+    higher-quality queries before any conclusion is drawn.
+  \item \textbf{One encoder unmeasured.} ColQwen3 is absent: its published
+    HuggingFace identifier does not resolve and the nearest checkpoint fails
+    to load under the pinned \texttt{colpali-engine}. A library upgrade is
+    required (Section~\ref{sec:future-work}).
+  \item \textbf{Single LLM judge (full design).} Both query filtering and
+    RAGAS metrics use a single Meditron-70B judge. Inter-judge agreement is
+    not measured here; this is an explicit future-work item, not a quality
+    claim.
   \item \textbf{Corpus skew.} PMC-OA is US-centric and EN-dominant; the six
     Track~B sources differ in domain mix, image quality and license terms.
     We control for visual density but cannot equalise editorial style.
-  \item \textbf{Single GPU class.} All cells run on a single H100. We do
-    not measure how each encoder behaves under tighter VRAM constraints
-    (A100~40GB, T4) or on mixed-precision fallbacks.
+  \item \textbf{Single GPU class.} All cells run on one 80\,GB-class
+    data-center GPU under Run:AI placement (the cluster is heterogeneous, so
+    the exact GPU model may vary across cells; latency figures are
+    indicative). We do not measure behaviour under tighter VRAM constraints
+    (A100~40GB, T4) or mixed-precision fallbacks.
   \item \textbf{One pipeline.} The benchmark holds the pipeline constant
     \emph{by design}, but the absolute numbers we report are conditional on
     \textsc{mmore}'s specific implementation choices (Milvus \textsc{FLAT}
@@ -314,7 +541,53 @@ benchmark against memorised content.
     may reorder the models.
 \end{itemize}
 
+\section{Future work}
+\label{sec:future-work}
+
+The current release validates the pipeline end-to-end and produces robust
+performance measurements; the retrieval-quality numbers are preliminary. The
+following items, in priority order, close the gap to a full benchmark.
+
+\begin{enumerate}
+  \item \textbf{Higher-quality queries.} Replace the homogeneous template
+    with queries that carry page-specific content. Two routes, in increasing
+    cost: (a)~\emph{extractive / caption-based} pseudo-queries drawn from each
+    page's own figure and table captions --- no LLM, deployable immediately,
+    and a direct test of whether the ColPali/ColGemma3 zero scores survive
+    non-homogeneous queries; (b)~\emph{LLM-authored} clinical questions via a
+    hosted API or a self-hosted judge, with the \texttt{requires\_visual} and
+    ambiguity filters of Section~\ref{sec:methodology-validation}. The
+    Meditron-70B route additionally requires resolving the
+    \texttt{torch}/\texttt{vllm} CUDA conflict on the cluster image.
+  \item \textbf{Restore ColQwen3.} Pin a \texttt{colpali-engine} /
+    \texttt{transformers} version compatible with the Qwen3-VL backbone and a
+    resolvable checkpoint, then re-run the cell; the 320-d index path is
+    already wired and configurable.
+  \item \textbf{Scale the corpus.} Extend from the 709-page tiny palier to the
+    1k/10k/50k paliers to observe the predicted retrieval-latency cliff at
+    realistic index sizes. This requires fetching additional PMC-OA PDFs
+    beyond the current 90.
+  \item \textbf{Statistical robustness.} Add the two remaining seeds and run
+    the planned bootstrap-CI, Holm-corrected pairwise tests.
+  \item \textbf{Generation metrics and Track~B.} Once vLLM loads, add the
+    RAGAS faithfulness/answer-relevancy generation metrics and execute the
+    multilingual Track~B cells.
+\end{enumerate}
+
 \section{Conclusion}
+
+We presented a system-integration release of a ColVision retrieval benchmark
+in which the RAG pipeline is held constant and only the visual encoder
+varies. On a 709-page figure-rich English medical corpus, four of five
+encoders ran end-to-end through \textsc{mmore}'s process--index--retrieve
+path. The robust outcome is a measured \emph{retrieval-latency--index-size
+trade-off}: per-page vector counts differ $4.3\times$ across encoders and
+drive an $8\times$ spread in per-query latency, with ColGemma3 the most
+compact and ColPali the densest. Retrieval-quality numbers are reported as
+preliminary, under template queries and a single seed, with two encoders at
+zero pending higher-quality queries. The release establishes a reproducible,
+provenance-tracked pipeline that makes the full multi-seed, multi-palier,
+LLM-query run --- and Track~B --- straightforward to execute next.
 
 \bibliographystyle{plainnat}
 \bibliography{references}

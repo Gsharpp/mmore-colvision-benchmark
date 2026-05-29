@@ -122,6 +122,43 @@ def run_retrieve(
     return _run(cmd)
 
 
+def _make_mmore_qf(queries_file: Path) -> Path:
+    """Convert SyntheticQuery JSONL to the plain-string-per-line format mmore expects.
+
+    mmore's retrieve DataLoader passes each parsed JSON value directly to
+    colpali_engine's process_queries(), which concatenates strings. Our JSONL
+    has full SyntheticQuery dicts per line — mmore gets a dict instead of a str
+    and raises TypeError. This converter extracts the 'question' field and
+    writes one JSON-encoded string per line, which mmore can handle.
+    """
+    import json as _json
+    out = queries_file.parent / (queries_file.stem + "_mmore.jsonl")
+    lines = []
+    for line in queries_file.read_text().splitlines():
+        if not line.strip():
+            continue
+        try:
+            obj = _json.loads(line)
+            q = obj.get("question") or obj.get("query") or str(obj)
+        except Exception:
+            q = line.strip()
+        lines.append(_json.dumps(q))
+    out.write_text("\n".join(lines) + "\n")
+    return out
+
+
+def _ensure_milvus_dir(index_config: Path) -> None:
+    """Parse db_path from the index YAML and mkdir its parent (Milvus won't do it)."""
+    try:
+        import yaml  # type: ignore[import-not-found]
+        cfg = yaml.safe_load(index_config.read_text())
+        db_path = cfg.get("milvus", {}).get("db_path") or cfg.get("db_path")
+        if db_path:
+            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass  # best-effort; Milvus itself will error with a clear message if this fails
+
+
 def run_pipeline(
     model_name: str,
     process_config: Path,
@@ -136,10 +173,13 @@ def run_pipeline(
     run.process = run_process(process_config, model_name=model_name, python=python)
     if not run.process.succeeded:
         return run
+    _ensure_milvus_dir(index_config)
     run.index = run_index(index_config, python=python)
     if not run.index.succeeded:
         return run
-    run.retrieve = run_retrieve(retrieve_config, queries_file, output_file, python=python)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    mmore_qf = _make_mmore_qf(queries_file)
+    run.retrieve = run_retrieve(retrieve_config, mmore_qf, output_file, python=python)
     return run
 
 

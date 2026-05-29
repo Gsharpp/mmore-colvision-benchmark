@@ -111,6 +111,7 @@ def run_cell(
     n_pages_in_palier: int,
 ) -> BenchmarkRecord:
     queryset = QuerySet.load_jsonl(cell.queryset_jsonl, name=cell.palier_id, language="en")
+    cell.output_file.parent.mkdir(parents=True, exist_ok=True)
     mmore_run = run_pipeline(
         model_name=cell.model_hf_name,
         process_config=cell.process_config,

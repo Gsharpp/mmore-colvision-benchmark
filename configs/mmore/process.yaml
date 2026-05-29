@@ -21,6 +21,6 @@ output_path: data/track_a/process
 
 model_name: vidore/colpali-v1.3
 
-skip_already_processed: false
+skip_already_processed: true
 num_workers: 2
 batch_size: 8

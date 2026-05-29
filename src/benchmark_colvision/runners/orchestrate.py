@@ -81,6 +81,59 @@ def _manifest_sha256(manifest_path: Path) -> str:
     return hashlib.sha256(manifest_path.read_bytes()).hexdigest()
 
 
+def _render_cell_configs(
+    model_id: str,
+    hf_name: str,
+    embed_dim: int,
+    base_dir: Path,
+    base_process_cfg: Path,
+    base_index_cfg: Path,
+    base_retrieve_cfg: Path,
+) -> tuple[Path, Path, Path]:
+    """Write per-model mmore configs with isolated output paths and return their paths.
+
+    Each model gets its own process output dir, Milvus DB, and collection so that
+    multiple models can run without overwriting each other's artefacts. The
+    embedding dimension is injected per-model because it differs across families
+    (128 for ColPali / ColQwen2 / ColGemma3, 320 for ColQwen3); a mismatch makes
+    the Milvus insert fail the dim assertion.
+    """
+    cell_dir = base_dir / "configs" / "mmore" / "cells" / model_id
+    cell_dir.mkdir(parents=True, exist_ok=True)
+
+    process_out = base_dir / "data" / "track_a" / "process" / model_id
+    process_out.mkdir(parents=True, exist_ok=True)
+    milvus_db = base_dir / "data" / "track_a" / "milvus" / f"{model_id}.db"
+    milvus_db.parent.mkdir(parents=True, exist_ok=True)
+    collection = f"bcv_{model_id}_pages"
+
+    proc_cfg = yaml.safe_load(base_process_cfg.read_text())
+    proc_cfg["output_path"] = str(process_out)
+    proc_path = cell_dir / "process.yaml"
+    proc_path.write_text(yaml.dump(proc_cfg, default_flow_style=False, allow_unicode=True))
+
+    idx_cfg = yaml.safe_load(base_index_cfg.read_text())
+    idx_cfg["parquet_path"] = str(process_out / "pdf_page_objects.parquet")
+    idx_cfg.setdefault("milvus", {})
+    idx_cfg["milvus"]["db_path"] = str(milvus_db)
+    idx_cfg["milvus"]["collection_name"] = collection
+    idx_cfg["milvus"]["create_collection"] = True
+    idx_cfg["milvus"]["dim"] = embed_dim
+    idx_path = cell_dir / "index.yaml"
+    idx_path.write_text(yaml.dump(idx_cfg, default_flow_style=False, allow_unicode=True))
+
+    ret_cfg = yaml.safe_load(base_retrieve_cfg.read_text())
+    ret_cfg["db_path"] = str(milvus_db)
+    ret_cfg["collection_name"] = collection
+    ret_cfg["model_name"] = hf_name
+    ret_cfg["dim"] = embed_dim
+    ret_cfg["text_parquet_path"] = str(process_out / "pdf_page_text.parquet")
+    ret_path = cell_dir / "retrieve.yaml"
+    ret_path.write_text(yaml.dump(ret_cfg, default_flow_style=False, allow_unicode=True))
+
+    return proc_path, idx_path, ret_path
+
+
 def run_track_a_for_model(
     model_id: str,
     seed: int,
@@ -113,6 +166,16 @@ def run_track_a_for_model(
     # Sanity-check the manifest parses.
     CorpusManifest.load(paths.corpus_manifest)
 
+    proc_cfg, idx_cfg, ret_cfg = _render_cell_configs(
+        model_id=model_id,
+        hf_name=hf_name,
+        embed_dim=int(model_entry.get("embed_dim", 128)),
+        base_dir=base_dir,
+        base_process_cfg=paths.mmore_process_config,
+        base_index_cfg=paths.mmore_index_config,
+        base_retrieve_cfg=paths.mmore_retrieve_config,
+    )
+
     records: list[BenchmarkRecord] = []
     for palier in paliers:
         palier_id = palier["id"]
@@ -127,9 +190,9 @@ def run_track_a_for_model(
             model_hf_name=hf_name,
             palier_id=palier_id,
             seed=seed,
-            process_config=paths.mmore_process_config,
-            index_config=paths.mmore_index_config,
-            retrieve_config=paths.mmore_retrieve_config,
+            process_config=proc_cfg,
+            index_config=idx_cfg,
+            retrieve_config=ret_cfg,
             queries_file=queries_jsonl,
             queryset_jsonl=queries_jsonl,
             output_file=output_file,

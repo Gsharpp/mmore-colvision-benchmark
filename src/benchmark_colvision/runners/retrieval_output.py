@@ -20,6 +20,13 @@ _DOC_KEYS = ("document_id", "doc_id", "page_id", "page", "id")
 
 
 def _doc_id_of(item: dict) -> str:
+    # mmore context format: {"page_content": ..., "metadata": {"pdf_name": ..., "page_number": ...}}
+    if "metadata" in item:
+        meta = item["metadata"]
+        pdf_name = meta.get("pdf_name") or Path(meta.get("pdf_path", "")).name
+        page_number = meta.get("page_number")
+        if pdf_name and page_number is not None:
+            return f"{pdf_name}#page={page_number}"
     for k in _DOC_KEYS:
         if k in item:
             return str(item[k])
@@ -41,7 +48,7 @@ def load_retrieval(path: Path) -> dict[str, list[str]]:
             key = entry.get("query_id") or entry.get("query")
             if key is None:
                 raise ValueError("retrieval entry missing 'query_id' and 'query'")
-            results = entry.get("results") or entry.get("documents") or []
+            results = entry.get("results") or entry.get("documents") or entry.get("context") or []
             out[str(key)] = _normalize_results(results)
         return out
     if isinstance(raw, dict):

@@ -7,6 +7,11 @@ built from the most distinctive terms of the page (not a verbatim sentence) so
 the task is not a trivial exact-match — but the phrasing is templated rather than
 LLM-authored.
 
+Questions are phrased in **English** to match the (English) corpus that ColVision
+models encode, and the wording is steered toward the page's visual payload
+(figures / tables) so the retrieval task exercises the multimodal pathway rather
+than plain text matching.
+
 Results from this path are PRELIMINARY: real inverse query generation with an
 LLM judge (e.g. Meditron-70B, see ``inverse_query_gen``) is deferred to future
 work. Performance metrics (throughput, latency, GPU memory) are unaffected by
@@ -52,6 +57,22 @@ def _distinctive_terms(text: str, k: int) -> list[str]:
     return terms[:k]
 
 
+def _visual_question(joined: str, *, has_figures: bool, has_tables: bool) -> str:
+    """Phrase an English question steered toward the page's visual payload.
+
+    The wording references the figure/table actually present on the page so the
+    retrieval task leans on the multimodal pathway rather than plain text. When
+    the page has neither, fall back to a content-grounded phrasing.
+    """
+    if has_figures and has_tables:
+        return f"Which page shows a figure and a table reporting {joined}?"
+    if has_figures:
+        return f"Which page shows a figure illustrating {joined}?"
+    if has_tables:
+        return f"Which page presents a table with data on {joined}?"
+    return f"Which page jointly documents {joined}?"
+
+
 def generate_mock_for_page(
     page: PageInput,
     n_queries: int = 2,
@@ -71,7 +92,11 @@ def generate_mock_for_page(
         out.append(
             SyntheticQuery(
                 query_id=query_id_for(page.pdf_path, page.page_number, i),
-                question=f"Quelle page documente conjointement : {joined} ?",
+                question=_visual_question(
+                    joined,
+                    has_figures=page.has_figures,
+                    has_tables=page.has_tables,
+                ),
                 expected_answer=joined,
                 requires_visual=page.has_figures or page.has_tables,
                 source_pdf=page.pdf_path,
