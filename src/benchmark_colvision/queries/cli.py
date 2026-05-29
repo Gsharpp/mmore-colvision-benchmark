@@ -12,6 +12,7 @@ from benchmark_colvision.corpus.corpus_manifest import CorpusManifest
 from benchmark_colvision.queries.ambiguity_filter import filter_queries
 from benchmark_colvision.queries.inverse_query_gen import generate_for_pages
 from benchmark_colvision.queries.methodology_validation import correlate
+from benchmark_colvision.queries.mock import generate_mock_for_pages
 from benchmark_colvision.queries.pdf_pages import iter_manifest_pages, page_text_index
 from benchmark_colvision.queries.schema import QuerySet
 
@@ -54,6 +55,44 @@ def generate(
     with VLLMClient(endpoint=vllm_endpoint, model=vllm_model, defaults=defaults) as llm:
         queries = generate_for_pages(pages_iter, llm, n_per_page=n_per_page)
 
+    language = manifest.languages[0] if len(manifest.languages) == 1 else "mixed"
+    qs = QuerySet(name=name or manifest.name, language=language, queries=queries)
+    qs.save_jsonl(out)
+    click.echo(json.dumps({"out": str(out), "n_queries": len(queries), "sha256": qs.sha256()}))
+
+
+@main.command("mock")
+@click.option("--corpus-manifest", type=click.Path(exists=True, path_type=Path), required=True)
+@click.option("--corpus-root", type=click.Path(exists=True, path_type=Path), required=True)
+@click.option("--out", type=click.Path(path_type=Path), required=True)
+@click.option("--n-per-page", type=int, default=2, show_default=True)
+@click.option("--max-pages", type=int, default=None, help="Cap the number of pages walked")
+@click.option("--name", default=None, help="QuerySet name (defaults to manifest name)")
+@click.option("--keep-visual-only/--all-pages", default=True, show_default=True,
+              help="Keep only pages with figures/tables (the visual-retrieval focus)")
+def mock(
+    corpus_manifest: Path,
+    corpus_root: Path,
+    out: Path,
+    n_per_page: int,
+    max_pages: int | None,
+    name: str | None,
+    keep_visual_only: bool,
+) -> None:
+    """LLM-free fallback: build templated, page-grounded queries (PRELIMINARY).
+
+    No vLLM/API needed. Each query is grounded on its source page for exact
+    retrieval ground truth; phrasing is templated from the page's distinctive
+    terms. Real LLM generation (`generate`) is the production path.
+    """
+    manifest = CorpusManifest.load(corpus_manifest)
+    pages_iter = iter_manifest_pages(manifest, corpus_root)
+    if max_pages is not None:
+        pages_iter = (p for i, p in enumerate(pages_iter) if i < max_pages)
+
+    queries = generate_mock_for_pages(
+        pages_iter, n_per_page=n_per_page, keep_visual_only=keep_visual_only
+    )
     language = manifest.languages[0] if len(manifest.languages) == 1 else "mixed"
     qs = QuerySet(name=name or manifest.name, language=language, queries=queries)
     qs.save_jsonl(out)
