@@ -67,14 +67,26 @@ def detect_lang(pdf_path: Path, max_chars: int) -> None:
 
 
 @main.command("download-pmc")
-@click.argument("pmcids", nargs=-1, required=True)
+@click.argument("pmcids", nargs=-1, required=False)
+@click.option("--pmcids-json", type=click.Path(exists=True, path_type=Path), default=None,
+              help="JSON list of PMCIDs (produced by sample-pmc-zh); alternative to positional args.")
 @click.option("--cache-dir", type=click.Path(path_type=Path), required=True)
 @click.option("--out-dir", type=click.Path(path_type=Path), required=True)
-def download_pmc(pmcids: tuple[str, ...], cache_dir: Path, out_dir: Path) -> None:
+def download_pmc(
+    pmcids: tuple[str, ...],
+    pmcids_json: Path | None,
+    cache_dir: Path,
+    out_dir: Path,
+) -> None:
     """Download a set of PMC OA packages (idempotent) and extract their PDFs."""
     from benchmark_colvision.corpus.pmc_downloader import download_corpus
 
-    pdfs = download_corpus(pmcids, cache_dir=cache_dir, pdf_out_dir=out_dir)
+    all_pmcids: list[str] = list(pmcids)
+    if pmcids_json is not None:
+        all_pmcids.extend(json.loads(pmcids_json.read_text()))
+    if not all_pmcids:
+        raise click.UsageError("provide PMCIDs as positional arguments or via --pmcids-json")
+    pdfs = download_corpus(all_pmcids, cache_dir=cache_dir, pdf_out_dir=out_dir)
     click.echo(f"extracted {len(pdfs)} PDFs to {out_dir}")
 
 
@@ -178,6 +190,33 @@ def build_manifest_cmd(
         )
 
 
+@main.command("sample-pmc-lang")
+@click.option("--language", default="zh", show_default=True,
+              help="ISO language code (zh, de, fr, …); native PMC OA literature")
+@click.option("--n", type=int, default=60, show_default=True, help="Number of PMCIDs")
+@click.option("--seed", type=int, default=0, show_default=True)
+@click.option("--out", type=click.Path(path_type=Path), required=True, help="JSON list of PMCIDs")
+def sample_pmc_lang(language: str, n: int, seed: int, out: Path) -> None:
+    """Sample native-language PMC OA article IDs via NCBI EUtils (no translation)."""
+    from benchmark_colvision.corpus.pmc_zh_sampler import sample_and_save
+
+    pmcids = sample_and_save(out, language=language, n=n, seed=seed)
+    click.echo(json.dumps({"out": str(out), "language": language, "n_pmcids": len(pmcids)}))
+
+
+@main.command("sample-hal")
+@click.option("--n", type=int, default=100, show_default=True, help="Number of articles to fetch")
+@click.option("--seed", type=int, default=0, show_default=True)
+@click.option("--language", default="fr", show_default=True, help="ISO language code")
+@click.option("--out", type=click.Path(path_type=Path), required=True, help="UrlListManifest JSON output")
+def sample_hal(n: int, seed: int, language: str, out: Path) -> None:
+    """Sample open-access medical articles from HAL and write a UrlListManifest."""
+    from benchmark_colvision.corpus.hal_downloader import sample_and_save
+
+    n_items = sample_and_save(out, n=n, language=language, seed=seed)
+    click.echo(json.dumps({"out": str(out), "n_items": n_items, "language": language}))
+
+
 @main.command("download-urls")
 @click.argument("manifest_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option("--out-dir", type=click.Path(path_type=Path), required=True)
@@ -227,3 +266,106 @@ def download_urls(
                 indent=2,
             )
         )
+
+
+@main.command("build-vidore")
+@click.option("--out-dir", type=click.Path(path_type=Path), required=True)
+@click.option("--repo", default="vidore/biomedical_lectures_eng_v2", show_default=True)
+@click.option("--split", default="test", show_default=True)
+@click.option("--language", default="en", show_default=True)
+@click.option("--manifest-name", default=None, help="Manifest name (defaults to the repo basename).")
+@click.option("--cache-dir", type=click.Path(path_type=Path), default=None)
+@click.option("--min-score", type=int, default=1, show_default=True,
+              help="Minimum qrel score to treat a page as relevant.")
+def build_vidore(
+    out_dir: Path,
+    repo: str,
+    split: str,
+    language: str,
+    manifest_name: str | None,
+    cache_dir: Path | None,
+    min_score: int,
+) -> None:
+    """Download a ViDoRe v2 dataset and build a mmore-ready corpus.
+
+    Writes {out_dir}/{pdfs/, corpus_manifest.json, queries.jsonl, qrels.json}.
+    Reconstructs one PDF per document (page images), plus a graded multi-relevant
+    qrels sidecar aligned to mmore's `<pdf>#page=<1-based>` output format.
+    """
+    from benchmark_colvision.corpus.vidore_v2 import download_and_build
+
+    result = download_and_build(
+        out_dir,
+        repo=repo,
+        split=split,
+        language=language,
+        manifest_name=manifest_name,
+        cache_dir=str(cache_dir) if cache_dir else None,
+        min_score=min_score,
+    )
+    click.echo(
+        json.dumps(
+            {
+                "repo": repo,
+                "out_dir": str(result.out_dir),
+                "n_docs": result.n_docs,
+                "n_pages": result.n_pages,
+                "n_queries": result.n_queries,
+                "n_qrels": result.n_qrels,
+                "n_queries_dropped": result.n_queries_dropped,
+            },
+            indent=2,
+        )
+    )
+
+
+@main.command("build-vidore-lang")
+@click.option("--out-dir", type=click.Path(path_type=Path), required=True)
+@click.option("--language", required=True, help="english, french, german, or spanish")
+@click.option("--repo", default="vidore/biomedical_lectures_v2", show_default=True)
+@click.option("--split", default="test", show_default=True)
+@click.option("--manifest-name", default="vidore", show_default=True)
+@click.option("--cache-dir", type=click.Path(path_type=Path), default=None)
+@click.option("--min-score", type=int, default=1, show_default=True,
+              help="Minimum qrel score to treat a page as relevant.")
+def build_vidore_lang(
+    out_dir: Path,
+    language: str,
+    repo: str,
+    split: str,
+    manifest_name: str,
+    cache_dir: Path | None,
+    min_score: int,
+) -> None:
+    """Build one query-language slice (queries.jsonl + qrels.json) of the ViDoRe
+    v2 multilingual release, for Track B.
+
+    Writes only {out_dir}/{queries.jsonl, qrels.json} — no PDFs or manifest. The
+    corpus is shared with Track A's ``biomedical_lectures_eng_v2`` build (same
+    corpus-id space); Track B re-retrieves these translated queries on Track A's
+    existing Milvus index (see ``bcv-run track-b-vidore``).
+    """
+    from benchmark_colvision.corpus.vidore_v2 import download_and_build_language
+
+    result = download_and_build_language(
+        out_dir,
+        language=language,
+        repo=repo,
+        split=split,
+        manifest_name=manifest_name,
+        cache_dir=str(cache_dir) if cache_dir else None,
+        min_score=min_score,
+    )
+    click.echo(
+        json.dumps(
+            {
+                "repo": repo,
+                "language": language,
+                "out_dir": str(result.out_dir),
+                "n_queries": result.n_queries,
+                "n_qrels": result.n_qrels,
+                "n_queries_dropped": result.n_queries_dropped,
+            },
+            indent=2,
+        )
+    )

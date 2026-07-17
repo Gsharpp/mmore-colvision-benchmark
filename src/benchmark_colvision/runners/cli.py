@@ -10,6 +10,7 @@ from benchmark_colvision.runners.mmore_wrapper import format_command, run_pipeli
 from benchmark_colvision.runners.orchestrate import (
     run_track_a_for_model,
     run_track_b_for_model,
+    run_track_b_vidore_for_model,
 )
 
 
@@ -114,5 +115,39 @@ def track_b(
     )
     click.echo(
         f"track-b: {record.cell.model_id} {record.cell.language} seed={record.cell.seed} "
+        f"→ ndcg@5={record.retrieval.ndcg_at_5}"
+    )
+
+
+@main.command(name="track-b-vidore")
+@click.option("--model-id", required=True, help="Model id as declared in models.yaml")
+@click.option("--language", required=True, help="english, french, german, or spanish")
+@click.option("--seed", required=True, type=int)
+@click.option("--models", "models_config", required=True, type=click.Path(exists=True, path_type=Path))
+@click.option("--mmore-commit", required=True)
+@click.option("--benchmark-version", default="0.1.0", show_default=True)
+@click.option("--base-dir", required=True, type=click.Path(exists=True, file_okay=False, path_type=Path))
+def track_b_vidore(
+    model_id: str,
+    language: str,
+    seed: int,
+    models_config: Path,
+    mmore_commit: str,
+    benchmark_version: str,
+    base_dir: Path,
+) -> None:
+    """Re-retrieve one (model, language, seed) cell on the ViDoRe multilingual
+    slice, reusing Track A's Milvus index for `model_id` unchanged."""
+    record = run_track_b_vidore_for_model(
+        model_id=model_id,
+        language=language,
+        seed=seed,
+        models_config=models_config,
+        mmore_commit=mmore_commit,
+        benchmark_version=benchmark_version,
+        base_dir=base_dir,
+    )
+    click.echo(
+        f"track-b-vidore: {record.cell.model_id} {record.cell.language} seed={record.cell.seed} "
         f"→ ndcg@5={record.retrieval.ndcg_at_5}"
     )

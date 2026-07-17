@@ -2,8 +2,17 @@
 
 Satisfies the `LLMClient` protocol expected by
 `benchmark_colvision.queries.inverse_query_gen.LLMClient` (a single `complete`
-method). Hits `/v1/completions` rather than `/v1/chat/completions` so it works
-with any model regardless of chat-template availability.
+method).
+
+Two transports, selected by `chat`:
+  - chat=False → `/v1/completions` (raw prompt). Works with any model regardless
+    of chat-template availability; right for base LLMs.
+  - chat=True  → `/v1/chat/completions` (prompt wrapped as a single user
+    message). Applies the model's chat template, which is what instruction-tuned
+    models (e.g. Qwen2.5-Instruct) need to actually follow the JSON instruction.
+
+`guided_json` is forwarded as a top-level field on both endpoints (a vLLM
+extension to the OpenAI schema) so guided decoding works either way.
 """
 
 from __future__ import annotations
@@ -30,6 +39,7 @@ class VLLMClient:
         model: str,
         *,
         defaults: VLLMSamplingDefaults | None = None,
+        chat: bool = False,
         timeout_s: float = 60.0,
         max_retries: int = 3,
         backoff_base_s: float = 1.0,
@@ -37,6 +47,7 @@ class VLLMClient:
     ) -> None:
         self.endpoint = endpoint.rstrip("/")
         self.model = model
+        self.chat = chat
         self.defaults = defaults or VLLMSamplingDefaults()
         self.timeout_s = timeout_s
         self.max_retries = max_retries
@@ -62,18 +73,24 @@ class VLLMClient:
         max_tokens: int | None = None,
         top_p: float | None = None,
         stop: list[str] | None = None,
+        guided_json: dict | None = None,
     ) -> str:
         payload: dict = {
             "model": self.model,
-            "prompt": prompt,
             "temperature": self.defaults.temperature if temperature is None else temperature,
             "max_tokens": self.defaults.max_tokens if max_tokens is None else max_tokens,
             "top_p": self.defaults.top_p if top_p is None else top_p,
         }
+        if self.chat:
+            payload["messages"] = [{"role": "user", "content": prompt}]
+            url = f"{self.endpoint}/v1/chat/completions"
+        else:
+            payload["prompt"] = prompt
+            url = f"{self.endpoint}/v1/completions"
         if stop:
             payload["stop"] = stop
-
-        url = f"{self.endpoint}/v1/completions"
+        if guided_json is not None:
+            payload["guided_json"] = guided_json
         last_exc: Exception | None = None
         for attempt in range(self.max_retries):
             try:
@@ -93,9 +110,12 @@ class VLLMClient:
             choices = data.get("choices") or []
             if not choices:
                 raise RuntimeError(f"vLLM response had no choices: {data!r}")
-            text = choices[0].get("text", "")
+            if self.chat:
+                text = (choices[0].get("message") or {}).get("content", "")
+            else:
+                text = choices[0].get("text", "")
             if not isinstance(text, str):
-                raise RuntimeError(f"vLLM choice.text is not a string: {choices[0]!r}")
+                raise RuntimeError(f"vLLM choice text is not a string: {choices[0]!r}")
             return text
         assert last_exc is not None
         raise last_exc

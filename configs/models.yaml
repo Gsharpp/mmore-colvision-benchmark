@@ -26,18 +26,33 @@ models:
     process_batch_size: 8
     pdf_dpi: 200
 
-  - id: colqwen3_v0_1
-    hf_name: "vidore/colqwen3-v0.1"
-    family: "ColQwen3"
-    embed_dim: 320
-    dtype: "bfloat16"
-    process_batch_size: 4   # higher dim → smaller batch
-    pdf_dpi: 200
-
   - id: colgemma3_colnetra
     hf_name: "Cognitive-Lab/ColNetraEmbed"
     family: "ColGemma3"
     embed_dim: 128
     dtype: "bfloat16"
     process_batch_size: 8
+    pdf_dpi: 200
+
+  # ColSmol (ColIdefics3) — small SmolVLM-based ColVision models, added to the
+  # mmore registry in 4102f96. They replace ColQwen3, which was dropped from the
+  # registry in the same commit. Both checkpoints route to the `ColIdefics3` /
+  # `ColIdefics3Processor` classes (colpali-engine). As the lightest models in
+  # the suite they anchor the low end of the scaling study.
+  # embed_dim assumed 128 (ColIdefics3 default) — confirm at first tiny run via
+  # scripts/rcp/diag_models.py (mmore also auto-detects the dim since 4985600).
+  - id: colsmol_256m
+    hf_name: "vidore/colSmol-256M"
+    family: "ColSmol"
+    embed_dim: 128
+    dtype: "bfloat16"
+    process_batch_size: 16   # very light → larger batch
+    pdf_dpi: 200
+
+  - id: colsmol_500m
+    hf_name: "vidore/colSmol-500M"
+    family: "ColSmol"
+    embed_dim: 128
+    dtype: "bfloat16"
+    process_batch_size: 12
     pdf_dpi: 200

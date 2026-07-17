@@ -89,6 +89,12 @@ def _make_fake_run(skill_by_model: dict[str, float]):
         if is_retrieve:
             queries_path = Path(cmd[cmd.index("-f") + 1])
             output_path = Path(cmd[cmd.index("-o") + 1])
+            # run_pipeline passes mmore's converted "<stem>_mmore.jsonl" (plain
+            # question strings) to -f; recover the original SyntheticQuery JSONL.
+            if queries_path.stem.endswith("_mmore"):
+                queries_path = queries_path.parent / (
+                    queries_path.stem[: -len("_mmore")] + ".jsonl"
+                )
             qs = QuerySet.load_jsonl(queries_path, name="x", language="en")
             model = state.get("current_model") or "unknown"
             skill = skill_by_model.get(model, 0.5)

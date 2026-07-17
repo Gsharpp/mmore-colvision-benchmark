@@ -35,6 +35,8 @@ def test_run_pipeline_invokes_three_steps(monkeypatch, tmp_path: Path):
         return FakeProc(returncode=0)
 
     monkeypatch.setattr(subprocess, "run", fake_run)
+    # run_pipeline reads the queries file to render mmore's converted query file.
+    (tmp_path / "q.jsonl").write_text('{"question": "q"}\n')
     run = run_pipeline(
         model_name="vidore/colpali-v1.3",
         process_config=tmp_path / "p.yml",

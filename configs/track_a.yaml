@@ -1,34 +1,29 @@
-# Track A — main benchmark on English medical PDFs with figures.
-# Scaling study: same model evaluated at increasing corpus sizes.
+# Track A — visual document retrieval on ViDoRe v2 (biomedical lectures).
+# Adopted, published benchmark: figure-rich lecture slides with human-validated,
+# vision-grounded queries and graded multi-page relevance (qrels). This replaces
+# the earlier home-grown PMC-OA scaling study, whose text-dense corpus and
+# text-grounded queries structurally favoured text retrieval over ColVision.
 
 corpus:
+  source: "vidore"
+  dataset: "vidore/biomedical_lectures_eng_v2"
   language: "en"
-  source: "pmc-oa"
-  visual_density_threshold: 0.30
-  mesh_filter:
-    include_top_level: ["A", "C", "E"]   # Anatomy, Diseases, Analytical & Diagnostic Techniques
 
+# ViDoRe is a fixed evaluation set (not a scaling sweep): a single "palier"
+# covering the whole corpus. The orchestrator reads {queries_dir}/full.jsonl and
+# the graded qrels sidecar {queries_dir}/full.qrels.json.
 scaling_paliers:
-  - id: tiny
-    n_pages: 100
-  - id: small
-    n_pages: 1000
-  - id: medium
-    n_pages: 10000
-  - id: large
-    n_pages: 50000
+  - id: full
+    n_pages: 1016
 
 queries:
   per_palier:
-    tiny: 50
-    small: 200
-    medium: 500
-    large: 1500
+    full: 160
 
 retrieval:
   top_k: 10
 
-seeds: [0, 1, 2]
+seeds: [0]
 
 # Filesystem layout used by bcv-run track-a. All paths are relative to the
 # repo root unless absolute. The runner derives per-palier paths from

@@ -33,6 +33,28 @@ def main() -> None:
 @click.option("--temperature", type=float, default=0.7, show_default=True)
 @click.option("--max-tokens", type=int, default=512, show_default=True)
 @click.option("--name", default=None, help="QuerySet name (defaults to manifest name)")
+@click.option(
+    "--query-mode",
+    type=click.Choice(["text", "visual", "mixed"]),
+    default="mixed",
+    show_default=True,
+    help=(
+        "text: text questions only (all pages). "
+        "visual: visual questions only (figures/tables pages). "
+        "mixed: 1 visual + 1 text on visual pages, 2 text on others."
+    ),
+)
+@click.option("--few-shot/--no-few-shot", default=False, show_default=True,
+              help="Prepend a one-shot example to the prompt (helps base LLMs like Meditron).")
+@click.option("--guided-json/--no-guided-json", default=False, show_default=True,
+              help="Enable vLLM guided JSON decoding (xgrammar backend).")
+@click.option("--chat/--no-chat", default=False, show_default=True,
+              help="Use the /v1/chat/completions endpoint (applies the model's chat "
+                   "template). Required for instruction-tuned models (e.g. Qwen2.5-Instruct).")
+@click.option("--query-language", default=None,
+              help="ISO code (e.g. 'en') forcing the language the questions are written in, "
+                   "regardless of the document language (cross-lingual retrieval). "
+                   "Defaults to the document language.")
 def generate(
     corpus_manifest: Path,
     corpus_root: Path,
@@ -44,6 +66,11 @@ def generate(
     temperature: float,
     max_tokens: int,
     name: str | None,
+    query_mode: str,
+    few_shot: bool,
+    guided_json: bool,
+    chat: bool,
+    query_language: str | None,
 ) -> None:
     """Generate inverse queries by walking the corpus manifest and calling vLLM."""
     manifest = CorpusManifest.load(corpus_manifest)
@@ -52,10 +79,13 @@ def generate(
         pages_iter = (p for i, p in enumerate(pages_iter) if i < max_pages)
 
     defaults = VLLMSamplingDefaults(temperature=temperature, max_tokens=max_tokens)
-    with VLLMClient(endpoint=vllm_endpoint, model=vllm_model, defaults=defaults) as llm:
-        queries = generate_for_pages(pages_iter, llm, n_per_page=n_per_page)
+    with VLLMClient(endpoint=vllm_endpoint, model=vllm_model, defaults=defaults, chat=chat) as llm:
+        queries = generate_for_pages(pages_iter, llm, n_per_page=n_per_page,
+                                     query_mode=query_mode,
+                                     few_shot=few_shot, use_guided_json=guided_json,
+                                     query_language=query_language)
 
-    language = manifest.languages[0] if len(manifest.languages) == 1 else "mixed"
+    language = query_language or (manifest.languages[0] if len(manifest.languages) == 1 else "mixed")
     qs = QuerySet(name=name or manifest.name, language=language, queries=queries)
     qs.save_jsonl(out)
     click.echo(json.dumps({"out": str(out), "n_queries": len(queries), "sha256": qs.sha256()}))

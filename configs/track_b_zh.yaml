@@ -1,0 +1,24 @@
+# Track B — Chinese Simplified (PMC OA ZH). ~59 PDFs, ~464 pages.
+languages:
+  - code: zh
+    name: "Chinese (Simplified)"
+    source: "pmc-oa"
+    pages_target: 464
+
+queries:
+  per_language: 60
+
+retrieval:
+  top_k: 10
+
+seeds: [0, 1, 2]
+
+paths:
+  corpus_manifest: data/track_b_zh/corpus_manifest.json
+  corpus_pdfs: data/track_b_zh/pdfs
+  queries_dir: data/track_b_zh/queries
+  mmore_process_config: configs/mmore/process.yaml
+  mmore_index_config: configs/mmore/index.yaml
+  mmore_retrieve_config: configs/mmore/retrieve.yaml
+  mmore_output_dir: data/track_b_zh/retrieve
+  records_dir: results/track_b

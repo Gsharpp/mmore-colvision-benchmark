@@ -16,7 +16,9 @@ class PdfEntry(BaseModel):
     language: str
     visual_density: float = Field(ge=0.0, le=1.0)
     mesh_tags: list[str] = Field(default_factory=list)
-    source: Literal["pmc-oa", "hal", "cairn", "scielo", "thieme-oa", "saudi-med", "cnki-oa", "other"]
+    source: Literal[
+        "pmc-oa", "hal", "cairn", "scielo", "thieme-oa", "saudi-med", "cnki-oa", "vidore", "other"
+    ]
     source_id: str | None = None
 
 

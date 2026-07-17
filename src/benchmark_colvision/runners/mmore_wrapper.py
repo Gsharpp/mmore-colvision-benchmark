@@ -1,4 +1,4 @@
-"""Subprocess wrappers around `python -m mmore colpali {process,index,retrieve}`.
+"""Subprocess wrappers around `python -m mmore colvision {process,index,retrieve}`.
 
 We invoke the real mmore CLI rather than importing its internals so that the
 benchmark measures the same code path a user would actually run.
@@ -94,16 +94,16 @@ def run_process(
     model_name: str | None = None,
     python: str = sys.executable,
 ) -> CommandResult:
-    """Run `mmore colpali process --config-file <path> [-m <model>]`."""
-    cmd = [python, "-m", "mmore", "colpali", "process", "--config-file", str(config_path)]
+    """Run `mmore colvision process --config-file <path> [-m <model>]`."""
+    cmd = [python, "-m", "mmore", "colvision", "process", "--config-file", str(config_path)]
     if model_name is not None:
         cmd += ["-m", model_name]
     return _run(cmd)
 
 
 def run_index(config_path: Path, python: str = sys.executable) -> CommandResult:
-    """Run `mmore colpali index --config-file <path>`."""
-    cmd = [python, "-m", "mmore", "colpali", "index", "--config-file", str(config_path)]
+    """Run `mmore colvision index --config-file <path>`."""
+    cmd = [python, "-m", "mmore", "colvision", "index", "--config-file", str(config_path)]
     return _run(cmd)
 
 
@@ -113,8 +113,8 @@ def run_retrieve(
     output_file: Path | None = None,
     python: str = sys.executable,
 ) -> CommandResult:
-    """Run `mmore colpali retrieve --config-file <path> [-f <queries>] [-o <out>]`."""
-    cmd = [python, "-m", "mmore", "colpali", "retrieve", "--config-file", str(config_path)]
+    """Run `mmore colvision retrieve --config-file <path> [-f <queries>] [-o <out>]`."""
+    cmd = [python, "-m", "mmore", "colvision", "retrieve", "--config-file", str(config_path)]
     if queries_file is not None:
         cmd += ["-f", str(queries_file)]
     if output_file is not None:
@@ -177,6 +177,27 @@ def run_pipeline(
     run.index = run_index(index_config, python=python)
     if not run.index.succeeded:
         return run
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    mmore_qf = _make_mmore_qf(queries_file)
+    run.retrieve = run_retrieve(retrieve_config, mmore_qf, output_file, python=python)
+    return run
+
+
+def run_retrieve_only(
+    model_name: str,
+    retrieve_config: Path,
+    queries_file: Path,
+    output_file: Path,
+    python: str = sys.executable,
+) -> MmoreRun:
+    """Re-retrieve a new queries file against an **already-built** Milvus index.
+
+    Skips process + index entirely (`run.process`/`run.index` stay `None`) — used
+    by Track B ViDoRe, which re-retrieves translated queries on the very same
+    per-model index Track A already built, instead of re-embedding a per-language
+    corpus.
+    """
+    run = MmoreRun(model_name=model_name)
     output_file.parent.mkdir(parents=True, exist_ok=True)
     mmore_qf = _make_mmore_qf(queries_file)
     run.retrieve = run_retrieve(retrieve_config, mmore_qf, output_file, python=python)

@@ -22,6 +22,8 @@ from benchmark_colvision.runners.run_track_a import TrackACell
 from benchmark_colvision.runners.run_track_a import run_cell as run_cell_a
 from benchmark_colvision.runners.run_track_b import TrackBCell
 from benchmark_colvision.runners.run_track_b import run_cell as run_cell_b
+from benchmark_colvision.runners.run_track_b_vidore import TrackBViDoReCell
+from benchmark_colvision.runners.run_track_b_vidore import run_cell as run_cell_b_vidore
 
 
 @dataclass
@@ -33,6 +35,7 @@ class _ResolvedPaths:
     mmore_retrieve_config: Path
     mmore_output_dir: Path
     records_dir: Path
+    corpus_pdfs: Path | None
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -66,6 +69,7 @@ def _resolve_paths(track_cfg: dict[str, Any], base_dir: Path) -> _ResolvedPaths:
         mmore_retrieve_config=_abs(paths["mmore_retrieve_config"]),
         mmore_output_dir=_abs(paths["mmore_output_dir"]),
         records_dir=_abs(paths["records_dir"]),
+        corpus_pdfs=_abs(paths["corpus_pdfs"]) if "corpus_pdfs" in paths else None,
     )
 
 
@@ -82,33 +86,41 @@ def _manifest_sha256(manifest_path: Path) -> str:
 
 
 def _render_cell_configs(
-    model_id: str,
+    cell_id: str,
     hf_name: str,
     embed_dim: int,
-    base_dir: Path,
+    *,
+    cells_dir: Path,
+    out_root: Path,
     base_process_cfg: Path,
     base_index_cfg: Path,
     base_retrieve_cfg: Path,
+    data_path: Path | None = None,
 ) -> tuple[Path, Path, Path]:
-    """Write per-model mmore configs with isolated output paths and return their paths.
+    """Write per-cell mmore configs with isolated output paths and return their paths.
 
-    Each model gets its own process output dir, Milvus DB, and collection so that
-    multiple models can run without overwriting each other's artefacts. The
-    embedding dimension is injected per-model because it differs across families
-    (128 for ColPali / ColQwen2 / ColGemma3, 320 for ColQwen3); a mismatch makes
-    the Milvus insert fail the dim assertion.
+    Each cell (a model for Track~A, a (model, language) pair for Track~B) gets its
+    own process output dir, Milvus DB, and collection so that cells can run without
+    overwriting each other's artefacts. The embedding dimension is injected per-cell
+    because it differs across families (128 for ColPali / ColQwen2 / ColGemma3 /
+    ColSmol, 320 for ColQwen3); a mismatch makes the Milvus insert fail the dim
+    assertion. `data_path`, when given, overrides the input PDF directory baked into
+    the base process config — Track~B needs this because each language has its own
+    corpus directory (Track~A relies on the single `data_path` in process.yaml).
     """
-    cell_dir = base_dir / "configs" / "mmore" / "cells" / model_id
+    cell_dir = cells_dir / cell_id
     cell_dir.mkdir(parents=True, exist_ok=True)
 
-    process_out = base_dir / "data" / "track_a" / "process" / model_id
+    process_out = out_root / "process" / cell_id
     process_out.mkdir(parents=True, exist_ok=True)
-    milvus_db = base_dir / "data" / "track_a" / "milvus" / f"{model_id}.db"
+    milvus_db = out_root / "milvus" / f"{cell_id}.db"
     milvus_db.parent.mkdir(parents=True, exist_ok=True)
-    collection = f"bcv_{model_id}_pages"
+    collection = f"bcv_{cell_id}_pages"
 
     proc_cfg = yaml.safe_load(base_process_cfg.read_text())
     proc_cfg["output_path"] = str(process_out)
+    if data_path is not None:
+        proc_cfg["data_path"] = str(data_path)
     proc_path = cell_dir / "process.yaml"
     proc_path.write_text(yaml.dump(proc_cfg, default_flow_style=False, allow_unicode=True))
 
@@ -167,10 +179,11 @@ def run_track_a_for_model(
     CorpusManifest.load(paths.corpus_manifest)
 
     proc_cfg, idx_cfg, ret_cfg = _render_cell_configs(
-        model_id=model_id,
-        hf_name=hf_name,
-        embed_dim=int(model_entry.get("embed_dim", 128)),
-        base_dir=base_dir,
+        model_id,
+        hf_name,
+        int(model_entry.get("embed_dim", 128)),
+        cells_dir=base_dir / "configs" / "mmore" / "cells",
+        out_root=base_dir / "data" / "track_a",
         base_process_cfg=paths.mmore_process_config,
         base_index_cfg=paths.mmore_index_config,
         base_retrieve_cfg=paths.mmore_retrieve_config,
@@ -183,6 +196,9 @@ def run_track_a_for_model(
         queries_jsonl = paths.queries_dir / f"{palier_id}.jsonl"
         if not queries_jsonl.exists():
             raise FileNotFoundError(f"queries JSONL not found: {queries_jsonl}")
+        # Optional graded multi-relevant qrels sidecar (ViDoRe): when present it
+        # overrides the single-page relevance derived from the queryset.
+        qrels_file = paths.queries_dir / f"{palier_id}.qrels.json"
         output_file = paths.mmore_output_dir / model_id / palier_id / f"seed_{seed}.json"
         record_out = paths.records_dir / model_id / palier_id / f"seed_{seed}.json"
         cell = TrackACell(
@@ -197,6 +213,7 @@ def run_track_a_for_model(
             queryset_jsonl=queries_jsonl,
             output_file=output_file,
             record_out=record_out,
+            qrels_file=qrels_file if qrels_file.exists() else None,
         )
         record = run_cell_a(
             cell,
@@ -244,6 +261,30 @@ def run_track_b_for_model(
     queries_jsonl = paths.queries_dir / f"{language}.jsonl"
     if not queries_jsonl.exists():
         raise FileNotFoundError(f"queries JSONL not found: {queries_jsonl}")
+
+    # Render per-(model, language) configs so each cell points at its own PDF
+    # directory, parquet, and Milvus collection. Without this, every Track~B cell
+    # would reprocess the Track~A corpus baked into the static process.yaml.
+    out_root = paths.corpus_manifest.parent
+    data_path = paths.corpus_pdfs or (out_root / "pdfs")
+    if not data_path.exists():
+        raise FileNotFoundError(
+            f"corpus PDF directory not found: {data_path} "
+            "(set paths.corpus_pdfs in the track config or create {manifest_dir}/pdfs)"
+        )
+    cell_id = f"{model_id}_{language}"
+    proc_cfg, idx_cfg, ret_cfg = _render_cell_configs(
+        cell_id,
+        hf_name,
+        int(model_entry.get("embed_dim", 128)),
+        cells_dir=base_dir / "configs" / "mmore" / "cells",
+        out_root=out_root,
+        base_process_cfg=paths.mmore_process_config,
+        base_index_cfg=paths.mmore_index_config,
+        base_retrieve_cfg=paths.mmore_retrieve_config,
+        data_path=data_path,
+    )
+
     output_file = paths.mmore_output_dir / model_id / language / f"seed_{seed}.json"
     record_out = paths.records_dir / model_id / language / f"seed_{seed}.json"
     cell = TrackBCell(
@@ -251,9 +292,9 @@ def run_track_b_for_model(
         model_hf_name=hf_name,
         language=language,
         seed=seed,
-        process_config=paths.mmore_process_config,
-        index_config=paths.mmore_index_config,
-        retrieve_config=paths.mmore_retrieve_config,
+        process_config=proc_cfg,
+        index_config=idx_cfg,
+        retrieve_config=ret_cfg,
         queries_file=queries_jsonl,
         queryset_jsonl=queries_jsonl,
         output_file=output_file,
@@ -265,4 +306,70 @@ def run_track_b_for_model(
         benchmark_version=benchmark_version,
         corpus_manifest_sha256=corpus_sha,
         n_pages_in_language=n_pages,
+    )
+
+
+def run_track_b_vidore_for_model(
+    model_id: str,
+    language: str,
+    seed: int,
+    *,
+    models_config: Path,
+    mmore_commit: str,
+    benchmark_version: str,
+    base_dir: Path,
+) -> BenchmarkRecord:
+    """Re-retrieve one (model, language, seed) cell on the ViDoRe multilingual slice.
+
+    Reuses the Track A Milvus index for `model_id` unchanged (same corpus across
+    languages — only queries are translated: english/french/german/spanish) via
+    the already-rendered `configs/mmore/cells/<model_id>/retrieve.yaml`. Track A
+    must have been run for this model first (that config + its Milvus DB must
+    exist); this cell only calls `mmore colvision retrieve`, never process/index.
+    """
+    models_cfg = _load_yaml(models_config)
+    model_entry = _lookup_model(models_cfg, model_id)
+    hf_name = model_entry["hf_name"]
+
+    retrieve_config = base_dir / "configs" / "mmore" / "cells" / model_id / "retrieve.yaml"
+    if not retrieve_config.exists():
+        raise FileNotFoundError(
+            f"{retrieve_config} not found — run Track A for {model_id!r} first "
+            "(it renders this cell's index/retrieve configs)."
+        )
+
+    corpus_manifest = base_dir / "data" / "track_a" / "corpus_manifest.json"
+    if not corpus_manifest.exists():
+        raise FileNotFoundError(f"Track A corpus manifest not found: {corpus_manifest}")
+    corpus_sha = _manifest_sha256(corpus_manifest)
+    manifest = CorpusManifest.load(corpus_manifest)
+
+    lang_dir = base_dir / "data" / "track_b_vidore" / language
+    queries_file = lang_dir / "queries.jsonl"
+    qrels_file = lang_dir / "qrels.json"
+    if not queries_file.exists():
+        raise FileNotFoundError(
+            f"{queries_file} not found — build it first "
+            f"(bcv-corpus build-vidore-lang --language {language} --out-dir {lang_dir})"
+        )
+
+    output_file = base_dir / "data" / "track_b_vidore" / model_id / language / f"seed_{seed}.json"
+    record_out = base_dir / "results" / "track_b_vidore" / model_id / language / f"seed_{seed}.json"
+    cell = TrackBViDoReCell(
+        model_id=model_id,
+        model_hf_name=hf_name,
+        language=language,
+        seed=seed,
+        retrieve_config=retrieve_config,
+        queries_file=queries_file,
+        qrels_file=qrels_file,
+        output_file=output_file,
+        record_out=record_out,
+    )
+    return run_cell_b_vidore(
+        cell,
+        mmore_commit=mmore_commit,
+        benchmark_version=benchmark_version,
+        corpus_manifest_sha256=corpus_sha,
+        n_pages=manifest.total_pages,
     )

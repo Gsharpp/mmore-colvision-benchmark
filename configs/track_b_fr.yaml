@@ -1,0 +1,24 @@
+# Track B — French (HAL OA). ~100 PDFs, ~800 pages.
+languages:
+  - code: fr
+    name: "French"
+    source: "hal"
+    pages_target: 800
+
+queries:
+  per_language: 100
+
+retrieval:
+  top_k: 10
+
+seeds: [0, 1, 2]
+
+paths:
+  corpus_manifest: data/track_b_fr/corpus_manifest.json
+  corpus_pdfs: data/track_b_fr/pdfs
+  queries_dir: data/track_b_fr/queries
+  mmore_process_config: configs/mmore/process.yaml
+  mmore_index_config: configs/mmore/index.yaml
+  mmore_retrieve_config: configs/mmore/retrieve.yaml
+  mmore_output_dir: data/track_b_fr/retrieve
+  records_dir: results/track_b

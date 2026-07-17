@@ -62,7 +62,7 @@ def test_parse_completion_rejects_non_array() -> None:
     assert parse_completion("[not json}") == []
 
 
-def test_generate_for_page_filters_non_visual() -> None:
+def test_generate_for_page_text_mode_drops_visual_items() -> None:
     page = PageInput(
         pdf_path="x.pdf", page_number=0, language="en", text="Cohort study.", has_figures=True
     )
@@ -72,12 +72,12 @@ def test_generate_for_page_filters_non_visual() -> None:
             '{"question":"q2","expected_answer":"a2","requires_visual":false}]'
         ]
     )
-    out = generate_for_page(page, llm, n_queries=2, keep_visual_only=True)
+    out = generate_for_page(page, llm, n_queries=2, query_mode="text")
     assert len(out) == 1
-    assert out[0].question == "q1"
+    assert out[0].question == "q2"
 
 
-def test_generate_for_page_keeps_all_when_visual_filter_off() -> None:
+def test_generate_for_page_visual_mode_skips_non_visual_page() -> None:
     page = PageInput(
         pdf_path="x.pdf", page_number=0, language="en", text="...", has_figures=False
     )
@@ -86,7 +86,20 @@ def test_generate_for_page_keeps_all_when_visual_filter_off() -> None:
             '[{"question":"q1","expected_answer":"a1","requires_visual":false}]'
         ]
     )
-    out = generate_for_page(page, llm, n_queries=2, keep_visual_only=False)
+    out = generate_for_page(page, llm, n_queries=2, query_mode="visual")
+    assert out == []
+
+
+def test_generate_for_page_mixed_mode_keeps_all_by_default() -> None:
+    page = PageInput(
+        pdf_path="x.pdf", page_number=0, language="en", text="...", has_figures=False
+    )
+    llm = FakeLLM(
+        responses=[
+            '[{"question":"q1","expected_answer":"a1","requires_visual":false}]'
+        ]
+    )
+    out = generate_for_page(page, llm, n_queries=2)
     assert len(out) == 1
 
 

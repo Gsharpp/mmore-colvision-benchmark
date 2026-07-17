@@ -22,8 +22,14 @@ def iter_pdf_pages(
     pdf_rel_path: str,
     language: str,
     min_text_chars: int = 80,
+    page_base: int = 0,
 ) -> Iterator[PageInput]:
-    """Yield one PageInput per page of a single PDF; skip pages with too little text."""
+    """Yield one PageInput per page of a single PDF; skip pages with too little text.
+
+    `page_base` shifts the emitted `page_number` (0 = historical PMC/HAL query-gen
+    convention; 1 = mmore colvision's output convention, needed to align doc ids
+    with ViDoRe's graded qrels sidecar — see `corpus.vidore_v2`).
+    """
     with fitz.open(pdf_path) as doc:
         for page_number, page in enumerate(doc):
             text = page.get_text("text") or ""
@@ -38,7 +44,7 @@ def iter_pdf_pages(
                 has_tables = False
             yield PageInput(
                 pdf_path=pdf_rel_path,
-                page_number=page_number,
+                page_number=page_number + page_base,
                 language=language,
                 text=text,
                 has_figures=has_figures,
@@ -51,10 +57,13 @@ def iter_manifest_pages(
     corpus_root: Path,
     *,
     min_text_chars: int = 80,
+    page_base: int = 0,
 ) -> Iterator[PageInput]:
     """Yield PageInputs for every page of every PDF in the manifest."""
     for entry in manifest.pdfs:
-        yield from _iter_entry_pages(entry, corpus_root, min_text_chars=min_text_chars)
+        yield from _iter_entry_pages(
+            entry, corpus_root, min_text_chars=min_text_chars, page_base=page_base
+        )
 
 
 def _iter_entry_pages(
@@ -62,6 +71,7 @@ def _iter_entry_pages(
     corpus_root: Path,
     *,
     min_text_chars: int,
+    page_base: int = 0,
 ) -> Iterator[PageInput]:
     absolute = corpus_root / entry.pdf_path
     if not absolute.exists():
@@ -71,6 +81,7 @@ def _iter_entry_pages(
         pdf_rel_path=entry.pdf_path,
         language=entry.language,
         min_text_chars=min_text_chars,
+        page_base=page_base,
     )
 
 

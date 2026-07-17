@@ -63,6 +63,12 @@ def _make_fake_run():
         if is_retrieve:
             queries_path = Path(cmd[cmd.index("-f") + 1])
             output_path = Path(cmd[cmd.index("-o") + 1])
+            # run_pipeline passes mmore's converted "<stem>_mmore.jsonl" (plain
+            # question strings) to -f; recover the original SyntheticQuery JSONL.
+            if queries_path.stem.endswith("_mmore"):
+                queries_path = queries_path.parent / (
+                    queries_path.stem[: -len("_mmore")] + ".jsonl"
+                )
             qs = QuerySet.load_jsonl(queries_path, name="x", language="en")
             data = []
             for q in qs.queries:
@@ -152,6 +158,7 @@ def _write_configs_track_b(tmp_path: Path) -> tuple[Path, Path]:
     manifest_path = tmp_path / "data" / "track_b" / "corpus_manifest.json"
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     _empty_corpus_manifest(manifest_path, track="B", languages=["en", "fr"])
+    (tmp_path / "data" / "track_b" / "pdfs").mkdir(parents=True, exist_ok=True)
 
     for lang in ("en", "fr"):
         _make_queryset(lang, lang, n=4).save_jsonl(queries_dir / f"{lang}.jsonl")
@@ -165,6 +172,7 @@ def _write_configs_track_b(tmp_path: Path) -> tuple[Path, Path]:
         "queries": {"per_language": 200},
         "paths": {
             "corpus_manifest": "data/track_b/corpus_manifest.json",
+            "corpus_pdfs": "data/track_b/pdfs",
             "queries_dir": "data/track_b/queries",
             "mmore_process_config": "configs/mmore/process.yaml",
             "mmore_index_config": "configs/mmore/index.yaml",
@@ -279,6 +287,35 @@ def test_run_track_b_for_model_writes_record(tmp_path: Path, monkeypatch) -> Non
     assert record.mmore_commit == "def456"
     out = tmp_path / "results" / "track_b" / "colpali_v1_3" / "fr" / "seed_1.json"
     assert out.exists()
+
+    # Per-(model, language) configs are rendered with isolated output paths and
+    # the language-specific PDF directory injected as data_path.
+    cell_dir = tmp_path / "configs" / "mmore" / "cells" / "colpali_v1_3_fr"
+    proc_cfg = yaml.safe_load((cell_dir / "process.yaml").read_text())
+    assert proc_cfg["data_path"] == str(tmp_path / "data" / "track_b" / "pdfs")
+    assert proc_cfg["output_path"] == str(
+        tmp_path / "data" / "track_b" / "process" / "colpali_v1_3_fr"
+    )
+    idx_cfg = yaml.safe_load((cell_dir / "index.yaml").read_text())
+    assert idx_cfg["milvus"]["collection_name"] == "bcv_colpali_v1_3_fr_pages"
+
+
+def test_run_track_b_missing_pdfs_raises(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(mmore_wrapper, "_run", _make_fake_run())
+    track_cfg, models_cfg = _write_configs_track_b(tmp_path)
+    # Remove the language PDF directory the renderer needs.
+    (tmp_path / "data" / "track_b" / "pdfs").rmdir()
+    with pytest.raises(FileNotFoundError, match="corpus PDF directory"):
+        run_track_b_for_model(
+            model_id="colpali_v1_3",
+            language="fr",
+            seed=0,
+            track_config=track_cfg,
+            models_config=models_cfg,
+            mmore_commit="x",
+            benchmark_version="0.1.0",
+            base_dir=tmp_path,
+        )
 
 
 def test_run_track_b_unknown_language_raises(tmp_path: Path, monkeypatch) -> None:

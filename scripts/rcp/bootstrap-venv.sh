@@ -36,6 +36,12 @@ JOB_NAME="bcv-bootstrap"
 SCRATCH_DIR="${SCRATCH_DIR:-/mloscratch/users/${USR}}"
 PROJECT_ROOT_AT="${SCRATCH_DIR}/bcv-dev"
 BCV_VENV="${SCRATCH_DIR}/bcv-venv"
+# Dedicated venv for the vLLM judge/query-generator. It is kept SEPARATE from
+# bcv-venv on purpose: the latest vLLM (>=0.20) is built for CUDA 13, but the
+# cluster image and bcv-venv's torch are CUDA 12.x — installing vLLM into
+# bcv-venv yields `ImportError: libcudart.so.13`. Pinning vllm<0.20 here gives a
+# self-consistent CUDA-12 torch+vLLM that actually starts. See docs/SPRINT_24H.md.
+BCV_VENV_VLLM="${SCRATCH_DIR}/bcv-venv-vllm"
 UV_CACHE_DIR="${SCRATCH_DIR}/uv-cache"
 FB="${FORCE_BOOTSTRAP:-0}"
 
@@ -50,8 +56,10 @@ if [ ! -f "${PROJECT_ROOT_AT}/pyproject.toml" ]; then
     echo "BCV_BOOTSTRAP_FAIL: repo not found at ${PROJECT_ROOT_AT} — clone it on the scratch PVC first"
     exit 1
 fi
-if [ "${FB}" != "1" ] && "${BCV_VENV}/bin/python" -c "import benchmark_colvision, torch, vllm" >/dev/null 2>&1; then
-    echo "BCV_BOOTSTRAP_DONE: venv already complete at ${BCV_VENV} (FORCE_BOOTSTRAP=1 to rebuild)"
+if [ "${FB}" != "1" ] \
+   && "${BCV_VENV}/bin/python" -c "import benchmark_colvision, torch, colpali_engine" >/dev/null 2>&1 \
+   && "${BCV_VENV_VLLM}/bin/python" -c "import vllm, httpx" >/dev/null 2>&1; then
+    echo "BCV_BOOTSTRAP_DONE: both venvs already complete (FORCE_BOOTSTRAP=1 to rebuild)"
     exit 0
 fi
 cd "${PROJECT_ROOT_AT}"
@@ -59,12 +67,19 @@ export UV_PROJECT_ENVIRONMENT="${BCV_VENV}"
 export UV_CACHE_DIR="${UV_CACHE_DIR}"
 export UV_PYTHON=3.11
 export UV_LINK_MODE=copy
-echo "[bootstrap] uv sync --frozen --extra gpu  (deps + editable project)"
+echo "[bootstrap] uv sync --frozen --extra gpu  (deps + editable project — torch/colpali-engine/mmore)"
 uv sync --frozen --extra gpu
-echo "[bootstrap] uv pip install vllm langchain-openai  (judge service)"
-uv pip install --python "${BCV_VENV}/bin/python" "vllm>=0.6" "langchain-openai>=0.2"
 "${BCV_VENV}/bin/python" -c "import benchmark_colvision; print('[bootstrap] import OK:', benchmark_colvision.__file__)"
-echo "BCV_BOOTSTRAP_DONE: venv ready at ${BCV_VENV}"
+
+# vLLM goes in a SEPARATE venv (CUDA-12 self-consistent). bcv-queries only needs
+# httpx to talk to it over HTTP, so the two venvs never have to coexist in one
+# process. vllm<0.20 keeps a CUDA-12 torch; >=0.20 pulls CUDA-13 wheels that fail
+# to load on this image (libcudart.so.13). langchain-openai lives here too.
+echo "[bootstrap] creating dedicated vLLM venv at ${BCV_VENV_VLLM} (CUDA-12 vllm<0.20)"
+uv venv "${BCV_VENV_VLLM}" --python 3.11
+uv pip install --python "${BCV_VENV_VLLM}/bin/python" "vllm<0.20" "httpx>=0.27" "langchain-openai>=0.2"
+"${BCV_VENV_VLLM}/bin/python" -c "import vllm, importlib.metadata as m; print('[bootstrap] vllm', m.version('vllm'), 'torch', m.version('torch'))"
+echo "BCV_BOOTSTRAP_DONE: venvs ready (${BCV_VENV} + ${BCV_VENV_VLLM})"
 EOF
 
 # Poll the pod logs for our sentinel. Robust across runai versions (no status

@@ -6,6 +6,7 @@ wrapper, scores retrieval, and writes one `BenchmarkRecord` JSON per cell.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -37,6 +38,7 @@ class TrackACell:
     queryset_jsonl: Path  # the rich queryset we generated, for relevance
     output_file: Path
     record_out: Path
+    qrels_file: Path | None = None  # graded multi-relevant qrels sidecar (ViDoRe)
 
 
 def _build_record(
@@ -62,17 +64,33 @@ def _build_record(
     )
 
 
+def _load_qrels(path: Path) -> dict[str, dict[str, float]]:
+    """Load a graded qrels sidecar: ``{query_id: {doc_id: grade}}``."""
+    return {
+        str(qid): {str(doc): float(grade) for doc, grade in rel.items()}
+        for qid, rel in json.loads(path.read_text()).items()
+    }
+
+
 def _scores_from_retrieval(
     retrieval_path: Path,
     queryset: QuerySet,
     top_ks: tuple[int, ...] = (1, 5, 10),
+    qrels: dict[str, dict[str, float]] | None = None,
 ) -> RetrievalScores:
     retrieval = load_retrieval(retrieval_path)
     qids = [q.query_id for q in queryset.queries]
     questions = [q.question for q in queryset.queries]
     ranked = align_to_queries(retrieval, qids, fallback_questions=questions)
-    relevant = [{f"{q.source_pdf}#page={q.source_page}"} for q in queryset.queries]
-    scores = evaluate_batch(ranked, relevant, ks=top_ks)
+    if qrels is not None:
+        # Graded, multi-relevant relevance (ViDoRe qrels). doc ids follow mmore's
+        # `<pdf_basename>#page=<1-based>` output format.
+        relevance = [qrels.get(qid, {}) for qid in qids]
+        relevant = [set(r) for r in relevance]
+        scores = evaluate_batch(ranked, relevant, relevance_per_query=relevance, ks=top_ks)
+    else:
+        relevant = [{f"{q.source_pdf}#page={q.source_page}"} for q in queryset.queries]
+        scores = evaluate_batch(ranked, relevant, ks=top_ks)
     return RetrievalScores(
         ndcg_at_1=scores.get("ndcg@1"),
         ndcg_at_5=scores.get("ndcg@5"),
@@ -111,6 +129,11 @@ def run_cell(
     n_pages_in_palier: int,
 ) -> BenchmarkRecord:
     queryset = QuerySet.load_jsonl(cell.queryset_jsonl, name=cell.palier_id, language="en")
+    qrels = (
+        _load_qrels(cell.qrels_file)
+        if cell.qrels_file is not None and cell.qrels_file.exists()
+        else None
+    )
     cell.output_file.parent.mkdir(parents=True, exist_ok=True)
     mmore_run = run_pipeline(
         model_name=cell.model_hf_name,
@@ -122,7 +145,7 @@ def run_cell(
     )
 
     if mmore_run.retrieve and mmore_run.retrieve.succeeded and cell.output_file.exists():
-        retrieval_scores = _scores_from_retrieval(cell.output_file, queryset)
+        retrieval_scores = _scores_from_retrieval(cell.output_file, queryset, qrels=qrels)
     else:
         retrieval_scores = RetrievalScores(n_queries=len(queryset.queries))
 

@@ -1,0 +1,24 @@
+# Track B — Arabic (PMC OA AR, native literature, NOT translated). ~50 PDFs.
+languages:
+  - code: ar
+    name: "Arabic"
+    source: "pmc-oa"
+    pages_target: 450
+
+queries:
+  per_language: 60
+
+retrieval:
+  top_k: 10
+
+seeds: [0, 1, 2]
+
+paths:
+  corpus_manifest: data/track_b_ar/corpus_manifest.json
+  corpus_pdfs: data/track_b_ar/pdfs
+  queries_dir: data/track_b_ar/queries
+  mmore_process_config: configs/mmore/process.yaml
+  mmore_index_config: configs/mmore/index.yaml
+  mmore_retrieve_config: configs/mmore/retrieve.yaml
+  mmore_output_dir: data/track_b_ar/retrieve
+  records_dir: results/track_b
