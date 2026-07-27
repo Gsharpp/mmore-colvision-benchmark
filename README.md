@@ -24,9 +24,10 @@ Metrics: nDCG@{1,5,10}, Recall@{1,5,10}, Precision@{1,5,10}, MRR, MAP.
 
 ```
 configs/               # Model, track and judge YAML configs
+results/               # Benchmark records (JSON) and aggregated metrics
 scripts/setup.sh       # Local uv-based environment bootstrap (CPU/GPU)
 scripts/rcp/           # EPFL RCP (Run:AI / Kubernetes) build + submit tooling
-scripts/slurm/         # Legacy SLURM job arrays (unused on RCP)
+scripts/rcp/debug/     # One-off diagnostic probes (model loading, key mapping)
 src/benchmark_colvision/
   corpus/              # PMC OA / HAL download, language & density filters, manifests
   queries/              # Query generation (LLM-based, inverse-query prompting)

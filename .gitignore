@@ -55,8 +55,13 @@ models/
 .env.local
 *.key
 
+# Documentation de travail et rapport : locaux uniquement.
+# La seule documentation publique est README.md.
 report/
 docs/
+
+# Scratch local (archives de sessions, PDFs de référence)
+.local/
 
 # Logs
 *.log

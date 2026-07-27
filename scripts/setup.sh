@@ -82,50 +82,20 @@ if [[ "${MODE}" == "--rcp" ]]; then
 ────────────────────────────────────────────────────────────────────────
 [setup --rcp] Next steps (you'll need to do these by hand):
 
-  1. Write the mmore-side configs (process / index / retrieve YAML):
-       configs/mmore/process.yaml
-       configs/mmore/index.yaml
-       configs/mmore/retrieve.yaml
-     Templates: https://github.com/Gsharpp/mmore (PR #305 branch)
+  1. Configure the Run:AI / Harbor environment (writes .rcp-env):
+       ./scripts/rcp/setup.sh
 
-  2. Start the vLLM judge in a long-lived SLURM job:
-       sbatch scripts/slurm/serve_meditron.sbatch
-     Note its hostname:port from the log, then:
-       export VLLM_ENDPOINT="http://<host>:8000"
+  2. Build the corpus for a track:
+       ./scripts/rcp/submit.sh corpus-vidore A
+       ./scripts/rcp/submit.sh corpus-lang <en|fr|zh|de|es>
 
-  3. Build the corpus for each track:
-       bcv-corpus download-pmc PMC12345 ... --cache-dir data/track_a/cache \
-                                             --out-dir   data/track_a/pdfs
-       bcv-corpus build-manifest data/track_a/pdfs \
-           --out data/track_a/corpus_manifest.json \
-           --name track_a --track A --source pmc-oa \
-           --language-override en
-
-  4. Generate synthetic queries:
-       bcv-queries generate \
-           --corpus-manifest data/track_a/corpus_manifest.json \
-           --corpus-root     data/track_a/pdfs \
-           --out             data/track_a/queries/raw.jsonl \
-           --vllm-endpoint   "$VLLM_ENDPOINT" \
-           --vllm-model      epfl-llm/meditron-70b
-       bcv-queries filter \
-           --in-jsonl  data/track_a/queries/raw.jsonl \
-           --out-jsonl data/track_a/queries/tiny.jsonl \
-           --corpus-manifest data/track_a/corpus_manifest.json \
-           --corpus-root     data/track_a/pdfs \
-           --vllm-endpoint   "$VLLM_ENDPOINT" \
-           --vllm-model      epfl-llm/meditron-70b
-
-  5. Run a smoke cell:
+  3. Run a smoke cell:
        bash scripts/smoke_rcp.sh
 
-  6. If green, submit the full arrays:
-       sbatch scripts/slurm/run_track_a.sbatch
-       sbatch scripts/slurm/run_track_b.sbatch
+  4. If green, submit the grid:
+       ./scripts/rcp/submit.sh all
 
-> For EPFL RCP / LiGHT specifically, prefer the Docker + Run:AI path:
->   ./scripts/rcp/setup.sh && ./scripts/rcp/submit.sh all
-> See docs/RCP_QUICKSTART.md.
+See docs/RCP_QUICKSTART.md for the full Run:AI workflow.
 ────────────────────────────────────────────────────────────────────────
 NEXT
 fi

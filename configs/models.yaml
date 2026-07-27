@@ -40,7 +40,7 @@ models:
   # `ColIdefics3Processor` classes (colpali-engine). As the lightest models in
   # the suite they anchor the low end of the scaling study.
   # embed_dim assumed 128 (ColIdefics3 default) — confirm at first tiny run via
-  # scripts/rcp/diag_models.py (mmore also auto-detects the dim since 4985600).
+  # scripts/rcp/debug/diag_models.py (mmore also auto-detects the dim since 4985600).
   - id: colsmol_256m
     hf_name: "vidore/colSmol-256M"
     family: "ColSmol"

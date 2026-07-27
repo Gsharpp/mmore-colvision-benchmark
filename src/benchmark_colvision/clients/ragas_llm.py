@@ -61,7 +61,7 @@ def judge_from_env(model: str, endpoint_env: str = "VLLM_ENDPOINT") -> object:
     if not endpoint:
         raise RuntimeError(
             f"Environment variable {endpoint_env} is not set — "
-            "submit the SLURM job scripts/slurm/serve_meditron.sbatch first "
+            "start a vLLM server first (see scripts/rcp/submit.sh) "
             "and export the printed endpoint URL."
         )
     return make_ragas_judge(JudgeConfig(endpoint=endpoint, model=model))

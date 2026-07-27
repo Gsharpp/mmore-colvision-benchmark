@@ -277,7 +277,6 @@ cmd_baseline() {
             zh) manifest="${D}/manifest-tb-zh.json"; corpus="${D}/pdfs-tb-zh"; queryset="${R}/data/track_b_zh/queries/zh.jsonl" ;;
             de) manifest="${D}/manifest-tb-de.json"; corpus="${D}/pdfs-tb-de"; queryset="${R}/data/track_b_de/queries/de.jsonl" ;;
             es) manifest="${D}/manifest-tb-es.json"; corpus="${D}/pdfs-tb-es"; queryset="${R}/data/track_b_es/queries/es.jsonl" ;;
-            ar) manifest="${D}/manifest-tb-ar.json"; corpus="${D}/pdfs-tb-ar"; queryset="${R}/data/track_b_ar/queries/ar.jsonl" ;;
             *) echo "[baseline] unknown Track B lang: ${tag}" >&2; return 1 ;;
         esac
         workdir="${R}/data/baseline_text/B/${tag}"; record="${R}/results/baseline_text/B/${tag}/seed_0.json"
@@ -479,7 +478,7 @@ Actions:
 Examples:
   $0 smoke
   $0 track-a colpali_v1_3 0
-  $0 track-b colqwen3_v0_1 ar 2
+  $0 track-b colqwen2_5_v0_2 zh 0
   $0 all
 
 Reads .rcp-env (created by scripts/rcp/setup.sh).

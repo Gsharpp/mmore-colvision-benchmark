@@ -56,7 +56,6 @@ FILES=(
     configs/track_b_zh.yaml
     configs/track_b_de.yaml
     configs/track_b_es.yaml
-    configs/track_b_ar.yaml
 )
 
 for f in "${FILES[@]}"; do
