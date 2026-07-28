@@ -89,7 +89,10 @@ def _scores_from_retrieval(
         relevant = [set(r) for r in relevance]
         scores = evaluate_batch(ranked, relevant, relevance_per_query=relevance, ks=top_ks)
     else:
-        relevant = [{f"{q.source_pdf}#page={q.source_page}"} for q in queryset.queries]
+        # Single-page relevance. `mmore_doc_id` converts the queryset's own page
+        # numbering into mmore's 1-based output space — scoring the raw
+        # `source_page` silently measured the page *before* the gold one.
+        relevant = [{q.mmore_doc_id()} for q in queryset.queries]
         scores = evaluate_batch(ranked, relevant, ks=top_ks)
     return RetrievalScores(
         ndcg_at_1=scores.get("ndcg@1"),

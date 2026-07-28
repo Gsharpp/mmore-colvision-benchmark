@@ -39,6 +39,31 @@ from benchmark_colvision.runners.run_track_b import TrackBCell
 from benchmark_colvision.runners.run_track_b import run_cell as run_cell_b
 
 
+def _fake_mmore_item(question: str, pages: list[tuple[str, int]]) -> dict:
+    """One entry in the real `mmore colvision retrieve` output format.
+
+    Keyed on the query *text* with a `context` list whose `metadata` carries
+    `pdf_name` + 1-based `page_number` — the shape the production parser reads.
+    """
+    return {
+        "query": question,
+        "context": [
+            {
+                "page_content": "...",
+                "metadata": {
+                    "pdf_name": pdf,
+                    "pdf_path": f"data/pdfs/{pdf}",
+                    "page_number": page,
+                    "rank": rank,
+                    "similarity": 1.0 - 0.1 * rank,
+                },
+            }
+            for rank, (pdf, page) in enumerate(pages, start=1)
+        ],
+    }
+
+
+
 def _deterministic_seed(*parts) -> int:
     """Hash-based seed that doesn't depend on PYTHONHASHSEED."""
     h = hashlib.sha256(":".join(str(p) for p in parts).encode()).hexdigest()
@@ -101,20 +126,13 @@ def _make_fake_run(skill_by_model: dict[str, float]):
             rng = random.Random(_deterministic_seed(model, str(output_path)))
             data = []
             for q in qs.queries:
-                relevant_doc = f"{q.source_pdf}#page={q.source_page}"
+                # mmore's real output: page numbers are 1-based (page_num + 1).
+                gold = (q.source_pdf, q.source_page + 1)
                 if rng.random() < skill:
-                    docs = [relevant_doc, "distractor1.pdf#page=0", "distractor2.pdf#page=0"]
+                    pages = [gold, ("distractor1.pdf", 1), ("distractor2.pdf", 1)]
                 else:
-                    docs = ["distractor1.pdf#page=0", "distractor2.pdf#page=0", relevant_doc]
-                data.append(
-                    {
-                        "query_id": q.query_id,
-                        "results": [
-                            {"document_id": d, "score": 1.0 - 0.1 * k}
-                            for k, d in enumerate(docs)
-                        ],
-                    }
-                )
+                    pages = [("distractor1.pdf", 1), ("distractor2.pdf", 1), gold]
+                data.append(_fake_mmore_item(q.question, pages))
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(json.dumps(data))
 

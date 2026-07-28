@@ -25,6 +25,31 @@ from benchmark_colvision.runners.orchestrate import (
 )
 
 
+def _fake_mmore_item(question: str, pages: list[tuple[str, int]]) -> dict:
+    """One entry in the real `mmore colvision retrieve` output format.
+
+    Keyed on the query *text* with a `context` list whose `metadata` carries
+    `pdf_name` + 1-based `page_number` — the shape the production parser reads.
+    """
+    return {
+        "query": question,
+        "context": [
+            {
+                "page_content": "...",
+                "metadata": {
+                    "pdf_name": pdf,
+                    "pdf_path": f"data/pdfs/{pdf}",
+                    "page_number": page,
+                    "rank": rank,
+                    "similarity": 1.0 - 0.1 * rank,
+                },
+            }
+            for rank, (pdf, page) in enumerate(pages, start=1)
+        ],
+    }
+
+
+
 def _make_queryset(scope: str, language: str, n: int = 4) -> QuerySet:
     queries = [
         SyntheticQuery(
@@ -72,15 +97,12 @@ def _make_fake_run():
             qs = QuerySet.load_jsonl(queries_path, name="x", language="en")
             data = []
             for q in qs.queries:
-                relevant = f"{q.source_pdf}#page={q.source_page}"
+                # mmore's real output: page numbers are 1-based (page_num + 1).
                 data.append(
-                    {
-                        "query_id": q.query_id,
-                        "results": [
-                            {"document_id": relevant, "score": 1.0},
-                            {"document_id": "distractor.pdf#page=99", "score": 0.5},
-                        ],
-                    }
+                    _fake_mmore_item(
+                        q.question,
+                        [(q.source_pdf, q.source_page + 1), ("distractor.pdf", 99)],
+                    )
                 )
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(json.dumps(data))

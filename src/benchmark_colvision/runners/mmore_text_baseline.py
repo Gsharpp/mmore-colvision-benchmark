@@ -46,7 +46,7 @@ from benchmark_colvision.corpus.ocr_pages import pages_from_ocr
 from benchmark_colvision.corpus.vidore_v2 import load_qrels
 from benchmark_colvision.evaluation.retrieval_metrics import evaluate_batch
 from benchmark_colvision.queries.pdf_pages import iter_manifest_pages
-from benchmark_colvision.queries.schema import QuerySet
+from benchmark_colvision.queries.schema import MMORE_PAGE_BASE, QuerySet
 from benchmark_colvision.results.schema import (
     BenchmarkRecord,
     CellId,
@@ -64,13 +64,13 @@ def collect_pages(
     corpus_root: Path,
     *,
     min_text_chars: int = 80,
-    page_base: int = 0,
+    page_base: int = MMORE_PAGE_BASE,
 ) -> tuple[list[str], list[str]]:
     """Return (doc_ids, texts) for every page, ids as ``"<pdf>#page=<N>"``.
 
-    `page_base=1` matches mmore colvision's output convention (needed for
-    ViDoRe's graded qrels sidecar); the historical PMC/HAL baselines keep the
-    0-based default, self-consistent with their own query-gen page numbering.
+    Defaults to mmore colvision's 1-based output convention so that text
+    baselines and ColVision runs are scored in one single id space — the only
+    way the two are comparable.
     """
     manifest = CorpusManifest.load(manifest_path)
     doc_ids: list[str] = []
@@ -134,10 +134,9 @@ def run_cell(args: argparse.Namespace) -> BenchmarkRecord:
         doc_ids, texts = pages_from_ocr(args.ocr_results)
         print(f"[mmore-text] {len(doc_ids)} OCR'd page units from {args.ocr_results}", flush=True)
     else:
-        page_base = 1 if qrels is not None else 0
         doc_ids, texts = collect_pages(
             Path(args.manifest), Path(args.corpus_root),
-            min_text_chars=args.min_text_chars, page_base=page_base,
+            min_text_chars=args.min_text_chars, page_base=MMORE_PAGE_BASE,
         )
         print(f"[mmore-text] {len(doc_ids)} page units from {args.manifest}", flush=True)
     over = [d for d in doc_ids if len(d) > _MILVUS_ID_MAX]
@@ -173,7 +172,7 @@ def run_cell(args: argparse.Namespace) -> BenchmarkRecord:
         relevant = [set(r) for r in relevance]
     else:
         relevance = None
-        relevant = [{f"{q.source_pdf}#page={q.source_page}"} for q in queryset.queries]
+        relevant = [{q.mmore_doc_id()} for q in queryset.queries]
 
     ret_cfg = RetrieverConfig(
         db=DBConfig(uri=db_path, name=collection),

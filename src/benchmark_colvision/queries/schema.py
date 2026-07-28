@@ -8,6 +8,11 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+# mmore colvision stores `page_num + 1` (colvision/run_process.py), so every doc
+# id that reaches the scorer is 1-based. Relevance judgements must be expressed
+# in that same space or a perfect run scores zero.
+MMORE_PAGE_BASE = 1
+
 
 class SyntheticQuery(BaseModel):
     """One auto-generated query tied to a single source page."""
@@ -17,10 +22,19 @@ class SyntheticQuery(BaseModel):
     expected_answer: str
     requires_visual: bool = True
     source_pdf: str  # path inside the corpus, relative
-    source_page: int  # 0-based
+    source_page: int  # numbered from `page_base`
     language: str
     judge_score: float | None = None  # ambiguity filter confidence
     accepted: bool = True
+    # Numbering convention of `source_page`. PMC/HAL query generation walks pages
+    # with `iter_manifest_pages(..., page_base=0)`, ViDoRe emits 1-based numbers.
+    # Defaults to 0 so JSONL written before this field existed still loads with
+    # the convention it was actually generated under.
+    page_base: int = 0
+
+    def mmore_doc_id(self) -> str:
+        """The gold doc id in mmore's `<pdf>#page=<1-based>` id space."""
+        return f"{self.source_pdf}#page={self.source_page - self.page_base + MMORE_PAGE_BASE}"
 
 
 class QuerySet(BaseModel):

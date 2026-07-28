@@ -192,6 +192,7 @@ def build_corpus_from_records(
                 requires_visual=True,
                 source_pdf=top_pdf,
                 source_page=int(top_page),
+                page_base=MMORE_PAGE_BASE,  # doc ids already carry mmore numbering
                 language=language,
             )
         )
@@ -351,6 +352,7 @@ def build_language_queryset(
                 requires_visual=True,
                 source_pdf=top_pdf,
                 source_page=int(top_page),
+                page_base=MMORE_PAGE_BASE,  # doc ids already carry mmore numbering
                 language=language,
             )
         )
