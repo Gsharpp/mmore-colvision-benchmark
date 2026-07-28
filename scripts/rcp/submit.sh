@@ -446,7 +446,8 @@ cmd_track_b() {
 }
 
 cmd_all() {
-    cmd_serve_meditron
+    # Query generation is NOT part of this: it needs a vLLM server and is run
+    # once per corpus, not per benchmark sweep.
     cmd_smoke
     cmd_track_a
     cmd_track_b
@@ -473,7 +474,7 @@ Actions:
   track-b-vidore [model] [lang] [seed]  re-retrieve on Track A's index, or all 18 if no args
   track-a [model] [seed]             one Track A cell, or all 6 if no args
   track-b [model] [lang] [seed]      one Track B cell, or all 90 if no args
-  all                                serve-meditron + smoke + track-a + track-b
+  all                                smoke + every Track A and Track B cell
 
 Examples:
   $0 smoke
