@@ -103,7 +103,7 @@ def _render_cell_configs(
     own process output dir, Milvus DB, and collection so that cells can run without
     overwriting each other's artefacts. The embedding dimension is injected per-cell
     because it differs across families (128 for ColPali / ColQwen2 / ColGemma3 /
-    ColSmol, 320 for ColQwen3); a mismatch makes the Milvus insert fail the dim
+    ColSmol); a mismatch makes the Milvus insert fail the dim
     assertion. `data_path`, when given, overrides the input PDF directory baked into
     the base process config — Track~B needs this because each language has its own
     corpus directory (Track~A relies on the single `data_path` in process.yaml).

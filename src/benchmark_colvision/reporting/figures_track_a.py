@@ -13,8 +13,43 @@ PALIER_ORDER = ["tiny", "small", "medium", "large"]
 PALIER_PAGES = {"tiny": 100, "small": 1000, "medium": 10000, "large": 50000}
 
 
+def has_scaling_axis(df: pd.DataFrame) -> bool:
+    """True when the frame spans >1 palier known to `PALIER_PAGES`.
+
+    The executed Track A design has a single palier (`full`), so the scaling
+    curves below have nothing to plot; callers should skip them rather than
+    hand matplotlib an empty log-scaled axis.
+    """
+    return df["palier_id"].map(PALIER_PAGES).dropna().nunique() > 1
+
+
 def _palier_x(df: pd.DataFrame) -> pd.Series:
     return df["palier_id"].map(PALIER_PAGES)
+
+
+def model_bar(
+    df: pd.DataFrame,
+    metric: str,
+    out_path: Path,
+    *,
+    ylabel: str | None = None,
+) -> Path:
+    """Rank models on `metric` — the single-corpus counterpart of the curves."""
+    scores = df.dropna(subset=[metric]).groupby("model_id")[metric].mean().sort_values()
+
+    fig, ax = plt.subplots(figsize=(7, 0.5 * len(scores) + 1.5))
+    ax.barh(scores.index, scores.to_numpy(), color="#4C72B0")
+    for y, value in enumerate(scores.to_numpy()):
+        ax.text(value, y, f" {value:.3f}", va="center", fontsize=8)
+    ax.set_xlabel(ylabel or metric)
+    ax.set_xlim(0, max(1.0, float(scores.max()) * 1.15))
+    ax.set_title(f"Track A — {metric} by model")
+    ax.grid(True, axis="x", alpha=0.3)
+    fig.tight_layout()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=200)
+    plt.close(fig)
+    return out_path
 
 
 def scaling_curve(

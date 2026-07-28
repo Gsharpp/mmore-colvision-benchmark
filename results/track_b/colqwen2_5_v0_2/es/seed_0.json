@@ -1,0 +1,55 @@
+{
+  "cell": {
+    "track": "B",
+    "model_id": "colqwen2_5_v0_2",
+    "palier_id": null,
+    "language": "es",
+    "seed": 0
+  },
+  "mmore_commit": "4102f96ad08727f38d4170b457fe21f780c3f2f5",
+  "benchmark_version": "0.1.0",
+  "corpus_manifest_sha256": "4a53c814c6e845e12b1c55b0e81fe20ce8468084e3f4ca9b4417c0a9f176fa1d",
+  "queries_sha256": "5ece407225bceec734b7f4c632d69d3746f5810f755c97181ca798ce0a11c545",
+  "created_at": "2026-06-04T04:21:48.007193+00:00",
+  "retrieval": {
+    "ndcg_at_1": 0.6069364161849711,
+    "ndcg_at_5": 0.7356146709878044,
+    "ndcg_at_10": 0.7438727165175396,
+    "recall_at_1": 0.6069364161849711,
+    "recall_at_5": 0.8410404624277457,
+    "recall_at_10": 0.865606936416185,
+    "precision_at_1": 0.6069364161849711,
+    "precision_at_5": 0.16820809248555074,
+    "precision_at_10": 0.08656069364161934,
+    "mrr": 0.70373142031379,
+    "map": 0.70373142031379,
+    "n_queries": 692
+  },
+  "generation": {
+    "faithfulness": null,
+    "answer_relevancy": null,
+    "context_precision": null,
+    "context_recall": null,
+    "judge_model": null,
+    "n_examples": 0
+  },
+  "performance": {
+    "process_duration_s": 249.24162673950195,
+    "index_duration_s": 33.16758394241333,
+    "retrieve_duration_total_s": 5413.734156370163,
+    "throughput_pages_per_s": 1.8054769016185375,
+    "latency_p50_ms": null,
+    "latency_p95_ms": null,
+    "latency_p99_ms": null,
+    "gpu_peak_mb": null,
+    "db_size_mb": null
+  },
+  "hardware": {
+    "gpu_name": null,
+    "gpu_count": null,
+    "cuda_version": null,
+    "torch_version": null,
+    "hostname": null
+  },
+  "notes": "re-scored: page-numbering fix (mmore 1-based doc ids)"
+}

@@ -161,7 +161,7 @@ def test_end_to_end_track_a_smoke(tmp_path: Path, monkeypatch) -> None:
     """3 models × 2 paliers × 2 seeds, mocked, end-to-end through reporting."""
     models = [
         ("colpali_v1_3", "vidore/colpali-v1.3", 0.50),
-        ("colqwen3_v0_1", "vidore/colqwen3-v0.1", 0.95),
+        ("colqwen2_5_v0_2", "vidore/colqwen2.5-v0.2", 0.95),
         ("colgemma3_colnetra", "Cognitive-Lab/ColNetraEmbed", 0.75),
     ]
     paliers = [("tiny", 100), ("small", 1000)]
@@ -231,7 +231,7 @@ def test_end_to_end_track_a_smoke(tmp_path: Path, monkeypatch) -> None:
 
     # The high-skill model should out-score the low-skill model on at least one palier
     by_model = ci.groupby("model_id")["point"].max()
-    assert by_model["colqwen3_v0_1"] > by_model["colpali_v1_3"]
+    assert by_model["colqwen2_5_v0_2"] > by_model["colpali_v1_3"]
 
     # Pairwise Wilcoxon — structure check; tolerate the all-zero-diff edge case
     try:

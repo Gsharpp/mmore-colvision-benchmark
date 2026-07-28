@@ -39,6 +39,7 @@ FILES=(
     src/benchmark_colvision/queries/inverse_query_gen.py
     src/benchmark_colvision/queries/cli.py
     src/benchmark_colvision/queries/pdf_pages.py
+    src/benchmark_colvision/queries/schema.py
     src/benchmark_colvision/corpus/cli.py
     src/benchmark_colvision/corpus/corpus_manifest.py
     src/benchmark_colvision/corpus/vidore_v2.py

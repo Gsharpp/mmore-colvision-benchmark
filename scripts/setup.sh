@@ -5,7 +5,7 @@
 #   scripts/setup.sh            # local install (CPU)
 #   scripts/setup.sh --gpu      # add CUDA wheels (machine with NVIDIA driver)
 #   scripts/setup.sh --rcp      # --gpu + vLLM in a local venv + dir layout
-#                                 (intended for SLURM / interactive GPU node)
+#                                 (intended for an interactive GPU node)
 #
 # > For EPFL RCP (Run:AI / Kubernetes), this script is NOT the recommended path.
 # > Use `scripts/rcp/setup.sh` instead, which builds + pushes a Docker image

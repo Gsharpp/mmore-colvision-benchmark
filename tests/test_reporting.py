@@ -22,7 +22,7 @@ from benchmark_colvision.reporting.latex_tables import (
 @pytest.fixture
 def track_a_df() -> pd.DataFrame:
     rows = []
-    for model in ("colpali", "colqwen3"):
+    for model in ("colpali", "colqwen2_5"):
         for palier in ("tiny", "small"):
             for seed in (0, 1, 2):
                 rows.append(
@@ -32,7 +32,7 @@ def track_a_df() -> pd.DataFrame:
                         "palier_id": palier,
                         "language": None,
                         "seed": seed,
-                        "retrieval.ndcg_at_5": 0.6 + 0.05 * (model == "colqwen3") + 0.01 * seed,
+                        "retrieval.ndcg_at_5": 0.6 + 0.05 * (model == "colqwen2_5") + 0.01 * seed,
                     }
                 )
     return pd.DataFrame(rows)
@@ -63,7 +63,7 @@ def test_track_a_table_emits_latex(track_a_df: pd.DataFrame) -> None:
     tex = track_a_table(track_a_df, metric="retrieval.ndcg_at_5")
     assert "\\begin{tabular}" in tex
     assert "colpali" in tex
-    assert "colqwen3" in tex
+    assert "colqwen2_5" in tex
     assert "tiny" in tex
 
 

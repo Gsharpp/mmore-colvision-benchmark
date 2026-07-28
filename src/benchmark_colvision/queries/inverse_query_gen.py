@@ -1,4 +1,4 @@
-"""Inverse query generation: ask an LLM (Meditron-70B) to author the queries
+"""Inverse query generation: ask an instruction-tuned LLM to author the queries
 that a given page would uniquely answer.
 
 The LLM is abstracted behind a `LLMClient` protocol so this module can be

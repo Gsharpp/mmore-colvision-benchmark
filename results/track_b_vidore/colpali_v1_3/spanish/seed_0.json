@@ -1,0 +1,55 @@
+{
+  "cell": {
+    "track": "B",
+    "model_id": "colpali_v1_3",
+    "palier_id": null,
+    "language": "spanish",
+    "seed": 0
+  },
+  "mmore_commit": "4102f96ad08727f38d4170b457fe21f780c3f2f5",
+  "benchmark_version": "0.1.0",
+  "corpus_manifest_sha256": "be3ab3606dcb2303b85b32c0a6cc7e38a7d66b4dc892dc04f8ebd1bc62a8a2c2",
+  "queries_sha256": "0b5c0346b82007ed3d2178f8509efe097086ab89b5ed6189fac3d3f5dc5b098d",
+  "created_at": "2026-07-06T15:43:51.743073+00:00",
+  "retrieval": {
+    "ndcg_at_1": 0.575,
+    "ndcg_at_5": 0.572121234890888,
+    "ndcg_at_10": 0.6110826563749371,
+    "recall_at_1": 0.33521847943722966,
+    "recall_at_5": 0.5928541189202956,
+    "recall_at_10": 0.7144352400050931,
+    "precision_at_1": 0.575,
+    "precision_at_5": 0.2612500000000001,
+    "precision_at_10": 0.17187500000000028,
+    "mrr": 0.6777752976190475,
+    "map": 0.5133844577603768,
+    "n_queries": 160
+  },
+  "generation": {
+    "faithfulness": null,
+    "answer_relevancy": null,
+    "context_precision": null,
+    "context_recall": null,
+    "judge_model": null,
+    "n_examples": 0
+  },
+  "performance": {
+    "process_duration_s": null,
+    "index_duration_s": null,
+    "retrieve_duration_total_s": 1795.5652856826782,
+    "throughput_pages_per_s": null,
+    "latency_p50_ms": null,
+    "latency_p95_ms": null,
+    "latency_p99_ms": null,
+    "gpu_peak_mb": null,
+    "db_size_mb": null
+  },
+  "hardware": {
+    "gpu_name": null,
+    "gpu_count": null,
+    "cuda_version": null,
+    "torch_version": null,
+    "hostname": null
+  },
+  "notes": null
+}

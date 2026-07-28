@@ -1,46 +1,46 @@
-# Track B — multilingual benchmark. 6 languages, ~1.5k pages each.
-# Same metrics as Track A, but no scaling; focus on cross-script performance.
+# Track B — cross-lingual retrieval. English queries against native-language
+# corpora, no scaling axis; the focus is script and language transfer.
+#
+# Every corpus is written natively in its language and filtered as such — no
+# document is translated. Sub-corpora are materialised by
+# scripts/rcp/materialize_tb_lang.py, capped at 50 PDFs / 500 pages per language.
 
 languages:
   - code: en
     name: "English"
-    source: "pmc-oa"
-    pages_target: 1500
+    source: "pmc-oa"          # PMC OA, English[Language]
 
   - code: fr
     name: "French"
-    source: "hal"
-    pages_target: 1500
+    source: "hal"             # HAL open-access theses
 
   - code: de
     name: "German"
-    source: "thieme-oa"
-    pages_target: 1500
+    source: "pmc-oa"          # PMC OA, German[Language]
 
   - code: es
     name: "Spanish"
-    source: "scielo"
-    pages_target: 1500
+    source: "pmc-oa"          # PMC OA, Spanish[Language]
 
   - code: zh
     name: "Chinese (Simplified)"
-    source: "cnki-oa"
-    pages_target: 1500
+    source: "pmc-oa"          # PMC OA, Chinese[Language]
     notes: "Logographic script — major VLM challenge"
 
-  - code: ar
-    name: "Arabic"
-    source: "saudi-med"
-    pages_target: 1500
-    notes: "RTL + connected script — VLM edge case"
+corpus:
+  max_pdfs: 50
+  max_pages: 500
 
+# Queries are generated per page from the page *text*, so their count follows
+# the corpus rather than a fixed target (en 436, fr 724, zh 432, de 554, es 692).
+# Being text-derived, they favour text retrievers — see results/README.md.
 queries:
-  per_language: 200
+  language: en                # cross-lingual: English queries throughout
 
 retrieval:
   top_k: 10
 
-seeds: [0, 1, 2]
+seeds: [0]
 
 # Filesystem layout used by bcv-run track-b. Per-language paths are derived
 # as {queries_dir}/{lang}.jsonl, {mmore_output_dir}/{model_id}/{lang}/ and

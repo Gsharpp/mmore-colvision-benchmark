@@ -1,0 +1,55 @@
+{
+  "cell": {
+    "track": "B",
+    "model_id": "mmore_text_hybrid",
+    "palier_id": null,
+    "language": "en",
+    "seed": 0
+  },
+  "mmore_commit": "",
+  "benchmark_version": "0.1.0",
+  "corpus_manifest_sha256": "",
+  "queries_sha256": "c024933c5a3ff3c15908bfdf0e7abc3777bf698c23a79984dfdcf15cbe19e6d6",
+  "created_at": "2026-06-04T14:44:39.982604+00:00",
+  "retrieval": {
+    "ndcg_at_1": 0.6490825688073395,
+    "ndcg_at_5": 0.8118809761690067,
+    "ndcg_at_10": 0.8187389930078769,
+    "recall_at_1": 0.6490825688073395,
+    "recall_at_5": 0.944954128440367,
+    "recall_at_10": 0.9655963302752294,
+    "precision_at_1": 0.6490825688073395,
+    "precision_at_5": 0.18899082568807485,
+    "precision_at_10": 0.09655963302752368,
+    "mrr": 0.7700305810397553,
+    "map": 0.7700305810397553,
+    "n_queries": 436
+  },
+  "generation": {
+    "faithfulness": null,
+    "answer_relevancy": null,
+    "context_precision": null,
+    "context_recall": null,
+    "judge_model": null,
+    "n_examples": 0
+  },
+  "performance": {
+    "process_duration_s": null,
+    "index_duration_s": 94.86901320144534,
+    "retrieve_duration_total_s": 15.03144214861095,
+    "throughput_pages_per_s": 4.680137223069963,
+    "latency_p50_ms": null,
+    "latency_p95_ms": null,
+    "latency_p99_ms": null,
+    "gpu_peak_mb": null,
+    "db_size_mb": null
+  },
+  "hardware": {
+    "gpu_name": null,
+    "gpu_count": null,
+    "cuda_version": null,
+    "torch_version": null,
+    "hostname": null
+  },
+  "notes": "native mmore text pipeline, hybrid dense+SPLADE (dense=BAAI/bge-m3, sparse=splade, hybrid_weight=0.5, reranker=off); page-level units"
+}

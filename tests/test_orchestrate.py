@@ -159,7 +159,7 @@ def _write_configs_track_a(tmp_path: Path) -> tuple[Path, Path]:
     models_cfg = {
         "models": [
             {"id": "colpali_v1_3", "hf_name": "vidore/colpali-v1.3"},
-            {"id": "colqwen3_v0_1", "hf_name": "vidore/colqwen3-v0.1"},
+            {"id": "colqwen2_5_v0_2", "hf_name": "vidore/colqwen2.5-v0.2"},
         ]
     }
     (cfg_dir / "track_a.yaml").write_text(yaml.safe_dump(track_cfg))

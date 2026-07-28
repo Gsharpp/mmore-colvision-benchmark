@@ -1,0 +1,55 @@
+{
+  "cell": {
+    "track": "A",
+    "model_id": "text_bge_m3",
+    "palier_id": "en",
+    "language": null,
+    "seed": 0
+  },
+  "mmore_commit": "4102f96ad08727f38d4170b457fe21f780c3f2f5",
+  "benchmark_version": "0.1.0",
+  "corpus_manifest_sha256": "",
+  "queries_sha256": "6207e5d08ec0bd78781ec01dfd8b9d9f937a8d9df1b0910a46e8bc89a8a372fd",
+  "created_at": "2026-07-03T16:38:09.850996+00:00",
+  "retrieval": {
+    "ndcg_at_1": 0.425,
+    "ndcg_at_5": 0.4726328434051867,
+    "ndcg_at_10": 0.5044615088998264,
+    "recall_at_1": 0.2594940476190476,
+    "recall_at_5": 0.5082004392666158,
+    "recall_at_10": 0.5988342723453016,
+    "precision_at_1": 0.425,
+    "precision_at_5": 0.2149999999999998,
+    "precision_at_10": 0.13687500000000014,
+    "mrr": 0.5601190476190476,
+    "map": 0.41601560532672666,
+    "n_queries": 160
+  },
+  "generation": {
+    "faithfulness": null,
+    "answer_relevancy": null,
+    "context_precision": null,
+    "context_recall": null,
+    "judge_model": null,
+    "n_examples": 0
+  },
+  "performance": {
+    "process_duration_s": null,
+    "index_duration_s": null,
+    "retrieve_duration_total_s": 56.98061291500926,
+    "throughput_pages_per_s": null,
+    "latency_p50_ms": null,
+    "latency_p95_ms": null,
+    "latency_p99_ms": null,
+    "gpu_peak_mb": null,
+    "db_size_mb": null
+  },
+  "hardware": {
+    "gpu_name": null,
+    "gpu_count": null,
+    "cuda_version": null,
+    "torch_version": null,
+    "hostname": null
+  },
+  "notes": "dense text baseline (BAAI/bge-m3); page-level units (OCR'd via mmore process, graded ViDoRe qrels)"
+}

@@ -45,7 +45,7 @@ def main() -> None:
     ),
 )
 @click.option("--few-shot/--no-few-shot", default=False, show_default=True,
-              help="Prepend a one-shot example to the prompt (helps base LLMs like Meditron).")
+              help="Prepend a one-shot example to the prompt (helps non-instruct base LLMs).")
 @click.option("--guided-json/--no-guided-json", default=False, show_default=True,
               help="Enable vLLM guided JSON decoding (xgrammar backend).")
 @click.option("--chat/--no-chat", default=False, show_default=True,

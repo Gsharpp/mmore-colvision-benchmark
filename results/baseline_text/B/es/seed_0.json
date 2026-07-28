@@ -1,0 +1,55 @@
+{
+  "cell": {
+    "track": "B",
+    "model_id": "text_bge_m3",
+    "palier_id": null,
+    "language": "es",
+    "seed": 0
+  },
+  "mmore_commit": "4102f96ad08727f38d4170b457fe21f780c3f2f5",
+  "benchmark_version": "0.1.0",
+  "corpus_manifest_sha256": "",
+  "queries_sha256": "5ece407225bceec734b7f4c632d69d3746f5810f755c97181ca798ce0a11c545",
+  "created_at": "2026-06-04T05:14:42.099425+00:00",
+  "retrieval": {
+    "ndcg_at_1": 0.5549132947976878,
+    "ndcg_at_5": 0.7207940474620675,
+    "ndcg_at_10": 0.739624049930382,
+    "recall_at_1": 0.5549132947976878,
+    "recall_at_5": 0.8627167630057804,
+    "recall_at_10": 0.9205202312138728,
+    "precision_at_1": 0.5549132947976878,
+    "precision_at_5": 0.17254335260115775,
+    "precision_at_10": 0.0920520231213882,
+    "mrr": 0.6812327965868421,
+    "map": 0.6812327965868421,
+    "n_queries": 692
+  },
+  "generation": {
+    "faithfulness": null,
+    "answer_relevancy": null,
+    "context_precision": null,
+    "context_recall": null,
+    "judge_model": null,
+    "n_examples": 0
+  },
+  "performance": {
+    "process_duration_s": null,
+    "index_duration_s": null,
+    "retrieve_duration_total_s": 65.47320495999884,
+    "throughput_pages_per_s": null,
+    "latency_p50_ms": null,
+    "latency_p95_ms": null,
+    "latency_p99_ms": null,
+    "gpu_peak_mb": null,
+    "db_size_mb": null
+  },
+  "hardware": {
+    "gpu_name": null,
+    "gpu_count": null,
+    "cuda_version": null,
+    "torch_version": null,
+    "hostname": null
+  },
+  "notes": "dense text baseline (BAAI/bge-m3); page-level units"
+}

@@ -1,1 +1,1 @@
-"""Synthetic query generation (inverse queries via Meditron) and methodology validation."""
+"""Synthetic query generation (inverse queries via an instruct LLM) and methodology validation."""

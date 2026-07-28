@@ -8,7 +8,9 @@ import click
 
 from benchmark_colvision.reporting.figures_track_a import (
     gpu_memory_curve,
+    has_scaling_axis,
     latency_curve,
+    model_bar,
     scaling_curve,
     throughput_bar,
 )
@@ -44,11 +46,17 @@ def figures_a(results_dir: Path, out_dir: Path, metric: str) -> None:
     """Render all Track A figures."""
     df = _load_frame(results_dir)
     df = df[df["track"] == "A"]
-    scaling_curve(df, metric=metric, out_path=out_dir / "track_a_scaling.png", ylabel=metric)
-    throughput_bar(df, out_path=out_dir / "track_a_throughput.png")
-    latency_curve(df, out_path=out_dir / "track_a_latency.png")
-    gpu_memory_curve(df, out_path=out_dir / "track_a_gpu_memory.png")
-    click.echo(f"wrote 4 figures to {out_dir}")
+    written = [model_bar(df, metric=metric, out_path=out_dir / "track_a_models.png", ylabel=metric)]
+    if has_scaling_axis(df):
+        written += [
+            scaling_curve(df, metric=metric, out_path=out_dir / "track_a_scaling.png", ylabel=metric),
+            throughput_bar(df, out_path=out_dir / "track_a_throughput.png"),
+            latency_curve(df, out_path=out_dir / "track_a_latency.png"),
+            gpu_memory_curve(df, out_path=out_dir / "track_a_gpu_memory.png"),
+        ]
+    else:
+        click.echo("single palier — skipping the scaling / latency / GPU curves")
+    click.echo(f"wrote {len(written)} figure(s) to {out_dir}")
 
 
 @main.command("figures-b")

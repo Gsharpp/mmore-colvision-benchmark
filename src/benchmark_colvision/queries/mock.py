@@ -13,7 +13,7 @@ models encode, and the wording is steered toward the page's visual payload
 than plain text matching.
 
 Results from this path are PRELIMINARY: real inverse query generation with an
-LLM judge (e.g. Meditron-70B, see ``inverse_query_gen``) is deferred to future
+LLM judge (see ``inverse_query_gen``) is deferred to future
 work. Performance metrics (throughput, latency, GPU memory) are unaffected by
 query phrasing; only retrieval-quality numbers carry this caveat.
 """
