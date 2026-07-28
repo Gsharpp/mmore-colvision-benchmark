@@ -35,10 +35,9 @@ models:
     pdf_dpi: 200
 
   # ColSmol (ColIdefics3) — small SmolVLM-based ColVision models, added to the
-  # mmore registry in 4102f96. They replace ColQwen3, which was dropped from the
-  # registry in the same commit. Both checkpoints route to the `ColIdefics3` /
+  # mmore registry in 4102f96. Both checkpoints route to the `ColIdefics3` /
   # `ColIdefics3Processor` classes (colpali-engine). As the lightest models in
-  # the suite they anchor the low end of the scaling study.
+  # the suite they anchor the low end of the size range.
   # embed_dim assumed 128 (ColIdefics3 default) — confirm at first tiny run via
   # scripts/rcp/debug/diag_models.py (mmore also auto-detects the dim since 4985600).
   - id: colsmol_256m

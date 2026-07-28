@@ -34,7 +34,6 @@ favours text retrievers — the standing limitation of that study.
   the id convention.
 - `track_a_pmc_tiny/` — the abandoned PMC-OA Track A design (palier `tiny`),
   replaced by the ViDoRe corpus.
-- `track_a_colqwen3_removed_model/` — ColQwen3, dropped from the mmore registry.
 
 ## Known caveats before quoting these numbers
 

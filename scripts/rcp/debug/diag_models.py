@@ -144,8 +144,8 @@ def run_diag(spec: dict) -> dict:
 
         expected_dims = {
             "colpali_v1_3": 128, "colqwen2_v1_0": 128,
-            "colqwen2_5_v0_2": 128, "colqwen3_v0_1": 320,
-            "colgemma3_colnetra": 128,
+            "colqwen2_5_v0_2": 128, "colgemma3_colnetra": 128,
+            "colsmol_256m": 128, "colsmol_500m": 128,
         }
         exp = expected_dims.get(spec["id"])
         if exp and img_dim != exp:

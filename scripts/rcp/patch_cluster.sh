@@ -6,7 +6,7 @@
 # Fichiers inclus :
 #   pyproject.toml                  — pin mmore 4102f96 + extra colvision (tf 5.3.0)
 #   uv.lock                         — lockfile aligné (colpali-engine 0.3.16, transformers 5.3.0)
-#   configs/models.yaml             — 6 modèles (ColQwen3 retiré, ColSmol 256M/500M)
+#   configs/models.yaml             — 6 modèles (ColPali, ColQwen2/2.5, ColGemma3, ColSmol ×2)
 #   runners/orchestrate.py          — Track B per-(model,lang) config rendering + data_path
 #   clients/vllm_client.py          — guided_json parameter
 #   queries/inverse_query_gen.py    — few-shot + GUIDED_JSON_SCHEMA
