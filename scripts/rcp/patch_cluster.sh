@@ -57,6 +57,12 @@ FILES=(
     configs/track_b_zh.yaml
     configs/track_b_de.yaml
     configs/track_b_es.yaml
+    configs/track_b_fr_native.yaml
+    configs/track_b_zh_native.yaml
+    configs/track_b_de_native.yaml
+    configs/track_b_es_native.yaml
+    configs/track_b_en_phi4.yaml
+    configs/track_b_zh_phi4.yaml
 )
 
 for f in "${FILES[@]}"; do

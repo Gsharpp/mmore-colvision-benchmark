@@ -196,6 +196,42 @@ cmd_gen_tb() {
          echo DONE_GENTB_${lang} && wc -l ${out}"
 }
 
+cmd_gen_tb_native() {
+    # Same generation as gen-tb, but the questions are written in the DOCUMENT's
+    # language instead of English, so a cell can be scored both cross-lingually
+    # (English query) and monolingually (native query) over the same index.
+    # Writes to data/track_b[_<lang>]/queries_native/<lang>.jsonl, which the
+    # configs/track_b_<lang>_native.yaml cells read.
+    # Usage: ./submit.sh gen-tb-native <lang> [model]
+    local lang="${1:?lang required}"
+    local model="${2:-Qwen/Qwen2.5-32B-Instruct}"
+    local dir; [ "${lang}" = "en" ] && dir="track_b" || dir="track_b_${lang}"
+    local base="${PROJECT_ROOT_AT}/data/${dir}"
+    local manifest="${base}/corpus_manifest.json" pdfs_dir="${base}/pdfs"
+    local out="${base}/queries_native/${lang}.jsonl"
+    local gpu_count=2 tp_size=2 health_iters=600 max_model_len=4096
+    local TS; TS=$(date +%H%M)
+    submit_one "bcv-gentbnat-${lang}-${TS}" "${gpu_count}" \
+        "export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:\${LD_LIBRARY_PATH:-} && \
+         ${BCV_VENV_VLLM}/bin/vllm serve ${model} \
+            --host 127.0.0.1 --port 8000 --max-model-len ${max_model_len} \
+            --tensor-parallel-size ${tp_size} \
+            --dtype bfloat16 --gpu-memory-utilization 0.90 > /tmp/vllm.log 2>&1 & \
+         echo [gentbnat] vLLM starting && \
+         for i in \$(seq 1 ${health_iters}); do sleep 5; \
+           if curl -sf http://127.0.0.1:8000/health > /dev/null 2>&1; then \
+             echo [gentbnat] vLLM healthy after \$((i*5))s; break; fi; \
+           if [ \$i -eq ${health_iters} ]; then echo [gentbnat] vLLM TIMEOUT; tail -20 /tmp/vllm.log; exit 1; fi; done && \
+         rm -f ${out} && mkdir -p \$(dirname ${out}) && \
+         ${BCV_VENV}/bin/bcv-queries generate \
+            --corpus-manifest ${manifest} --corpus-root ${pdfs_dir} \
+            --out ${out} --vllm-endpoint http://127.0.0.1:8000 \
+            --vllm-model ${model} --n-per-page 2 \
+            --temperature 0.7 --max-tokens 400 \
+            --query-mode mixed --query-language ${lang} --few-shot --guided-json --chat && \
+         echo DONE_GENTBNAT_${lang} && wc -l ${out}"
+}
+
 cmd_corpus_fr() {
     # Build the French Track B corpus from HAL.
     # Usage: ./submit.sh corpus-fr [n_articles=100] [seed=0]
@@ -421,6 +457,67 @@ cmd_track_a() {
     fi
 }
 
+cmd_track_b_native() {
+    # Same cells as track-b, but scored against the NATIVE-language queries
+    # (configs/track_b_<lang>_native.yaml). The pages are already processed and
+    # indexed by the cross-lingual run, so only `retrieve` actually re-runs.
+    # Usage: ./submit.sh track-b-native [model] [lang] [seed=0]
+    local model="${1:-}" lang="${2:-}" seed="${3:-0}"
+    if [ -n "${model}" ] && [ -n "${lang}" ]; then
+        local safe_model="${model//_/-}"
+        submit_one "bcv-tbnat-${safe_model}-${lang}-s${seed}" 1 \
+            "bcv-run track-b --model-id ${model} --language ${lang} --seed ${seed} \
+                --config configs/track_b_${lang}_native.yaml --models configs/models.yaml \
+                --mmore-commit ${MMORE_REV}"
+    else
+        local models=(colqwen2_5_v0_2 colgemma3_colnetra colqwen2_v1_0 colpali_v1_3 colsmol_500m colsmol_256m)
+        for l in fr zh de es; do
+            for m in "${models[@]}"; do cmd_track_b_native "${m}" "${l}" 0; done
+        done
+    fi
+}
+
+cmd_track_b_native_serial() {
+    # Repair path for track-b-native. Co-scheduling several cells of the same
+    # language makes them read one Milvus index concurrently; the loser returns
+    # nothing and the record lands with ndcg_at_5=null, or the cell hangs
+    # outright. Here one job per language walks its models *in sequence*, and
+    # each cell's retrieve output is purged first so a half-written directory
+    # cannot be mistaken for a finished one.
+    # Usage: ./submit.sh track-b-native-serial <lang> <model> [model...]
+    local lang="$1"; shift
+    local seed=0
+    local steps=""
+    for m in "$@"; do
+        # Single line per step: RunAI strips backslash continuations.
+        steps="${steps} rm -rf data/track_b_${lang}/retrieve_native/${m} results/track_b_native/${m}/${lang} ;"
+        steps="${steps} bcv-run track-b --model-id ${m} --language ${lang} --seed ${seed} --config configs/track_b_${lang}_native.yaml --models configs/models.yaml --mmore-commit ${MMORE_REV} ;"
+    done
+    steps="${steps} echo SERIAL_DONE_${lang}"
+    submit_one "bcv-tbnatser-${lang}-s${seed}" 1 "${steps}"
+}
+
+cmd_track_b_phi4() {
+    # Query-generator variance: the same cells as track-b, but scored against
+    # queries written by microsoft/phi-4 instead of Qwen2.5-32B-Instruct. Phi-4
+    # shares no backbone with any encoder under test, so the gap between the two
+    # runs measures how much the generator's family matters.
+    # Usage: ./submit.sh track-b-phi4 [model] [lang] [seed=0]
+    local model="${1:-}" lang="${2:-}" seed="${3:-0}"
+    if [ -n "${model}" ] && [ -n "${lang}" ]; then
+        local safe_model="${model//_/-}"
+        submit_one "bcv-tbphi4-${safe_model}-${lang}-s${seed}" 1 \
+            "bcv-run track-b --model-id ${model} --language ${lang} --seed ${seed} \
+                --config configs/track_b_${lang}_phi4.yaml --models configs/models.yaml \
+                --mmore-commit ${MMORE_REV}"
+    else
+        local models=(colqwen2_5_v0_2 colgemma3_colnetra colqwen2_v1_0 colpali_v1_3 colsmol_500m colsmol_256m)
+        for l in en zh; do
+            for m in "${models[@]}"; do cmd_track_b_phi4 "${m}" "${l}" 0; done
+        done
+    fi
+}
+
 cmd_track_b() {
     local model="${1:-}" lang="${2:-}" seed="${3:-}"
     if [ -n "${model}" ] && [ -n "${lang}" ] && [ -n "${seed}" ]; then
@@ -491,6 +588,7 @@ case "${ACTION}" in
     serve-meditron)  cmd_serve_meditron  ;;
     gen-queries)     cmd_gen_queries "$@" ;;
     gen-tb)          cmd_gen_tb "$@"     ;;
+    gen-tb-native)   cmd_gen_tb_native "$@" ;;
     corpus-pmc500)   cmd_corpus_pmc500 "$@" ;;
     corpus-fr)       cmd_corpus_fr "$@"  ;;
     corpus-zh)       cmd_corpus_zh "$@"  ;;
@@ -504,6 +602,9 @@ case "${ACTION}" in
     track-b-vidore)  cmd_track_b_vidore "$@" ;;
     track-a)         cmd_track_a "$@"    ;;
     track-b)         cmd_track_b "$@"    ;;
+    track-b-native)  cmd_track_b_native "$@" ;;
+    track-b-native-serial) cmd_track_b_native_serial "$@" ;;
+    track-b-phi4)    cmd_track_b_phi4 "$@" ;;
     all)             cmd_all             ;;
     help|--help|-h|*) cmd_help           ;;
 esac

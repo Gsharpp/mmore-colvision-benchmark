@@ -1,0 +1,24 @@
+# Track B — English (PMC OA). ~90 PDFs, ~709 pages.
+languages:
+  - code: en
+    name: "English"
+    source: "pmc-oa"
+    pages_target: 709
+
+queries:
+  per_language: 100
+
+retrieval:
+  top_k: 10
+
+seeds: [0, 1, 2]
+
+paths:
+  corpus_manifest: data/track_b/corpus_manifest.json
+  corpus_pdfs: data/track_b/pdfs
+  queries_dir: data/track_b/queries_phi4
+  mmore_process_config: configs/mmore/process.yaml
+  mmore_index_config: configs/mmore/index.yaml
+  mmore_retrieve_config: configs/mmore/retrieve.yaml
+  mmore_output_dir: data/track_b/retrieve_phi4
+  records_dir: results/track_b_phi4
