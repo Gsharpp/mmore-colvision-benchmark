@@ -40,6 +40,11 @@ data/
 *.jpg
 *.jpeg
 
+# Exception : les figures du README sont versionnées (générées par
+# scripts/make_figures.py, seules images suivies du dépôt).
+!assets/
+!assets/*.png
+
 # Milvus
 *.db
 milvus_data/

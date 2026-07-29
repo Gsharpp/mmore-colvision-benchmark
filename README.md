@@ -1,239 +1,207 @@
-# mmore-colvision-benchmark
+# Does visual document retrieval actually beat text retrieval?
 
-Does **visual document retrieval** actually beat a text RAG pipeline on real
-documents — and does it hold up outside English?
+Six **ColVision** multi-vector encoders (ColPali, ColQwen2, ColQwen2.5, ColGemma3,
+ColSmol-256M/500M) benchmarked against two text retrieval pipelines inside a single
+frozen RAG stack — [mmore](https://github.com/swiss-ai/mmore) — across three corpora
+and 54 model cells. The suite pins an exact mmore commit and drives its CLI as a
+subprocess, so every number reflects the code path a real mmore user runs, not a
+reimplementation.
 
-This benchmark answers both inside [mmore](https://github.com/swiss-ai/mmore),
-a multimodal RAG framework. Six ColVision multi-vector models are compared
-against two text baselines, one of them mmore's own retrieval path. The suite
-pins an exact mmore commit and drives its CLI as a subprocess, so every number
-reflects the code path a real mmore user runs — not a reimplementation.
+The headline is not a ranking. **Whether text or vision wins depends on how the query
+set was written** — and most published comparisons never say.
 
-Academic project (Cassiopée), Télécom SudParis, run on EPFL's LiGHT cluster.
+Academic project (Cassiopée), Télécom SudParis, run on EPFL LiGHT's Run:AI cluster.
 
 ---
 
-## Headline result
+## 1. With vision-grounded queries, visual retrieval wins — and cost, not quality, separates the leaders
 
-nDCG@5 — best ColVision model per cell, against both text baselines:
+![Retrieval quality and cost on ViDoRe v2 biomedical lectures](assets/quality_and_cost.png)
 
-| | Track A | en | fr | zh | de | es |
-| --- | --- | --- | --- | --- | --- | --- |
-| **best ColVision** | **0.630** | **0.860** | **0.756** | **0.750** | **0.749** | **0.807** |
-| dense `bge-m3` | 0.473 | 0.734 | 0.620 | 0.639 | 0.714 | 0.721 |
-| mmore hybrid | 0.492 | 0.812 | 0.517 | 0.372 | 0.594 | 0.551 |
+On [ViDoRe v2](https://huggingface.co/datasets/vidore) biomedical lectures — 1,016
+figure-rich pages, 160 queries written by a model *looking at the page* and then
+validated by human annotators, with graded multi-page relevance — four of the six
+encoders beat both text pipelines. The best is **+28% nDCG@5** over mmore's own text
+retriever.
 
-**Visual retrieval wins in every cell.** Three findings behind that table:
+The top three sit within **0.006 nDCG@5** of each other, so quality does not decide
+between them. Cost does: retrieval wall-clock per query spans **2.11 s (ColGemma3) to
+8.59 s (ColSmol-256M)**, and it does not track model size — the *smallest* encoder is
+the slowest to query. The cost follows the number of vectors a model emits per page,
+which is what mmore's MaxSim reranker iterates over, not the parameter count.
+ColGemma3 delivers front-of-pack quality at a quarter of ColQwen2.5's cost.
 
-1. **The text baseline degrades badly outside English.** mmore's hybrid
-   retriever fuses a multilingual dense encoder with an **English** SPLADE
-   sparse model. On Chinese it scores 0.372 — *below* the plain dense retriever
-   at 0.639. Hybrid fusion only pays off in English (0.812 vs 0.734). mmore's
-   default text path is not cross-lingual-robust.
-2. **No single ColVision model dominates.** ColQwen2.5 leads on English,
-   French and Chinese, ColGemma3 on German and Spanish. Model choice is a
-   language-dependent decision, not a ranking.
-3. **Model size is not the axis that matters.** ColSmol-256M (0.655 en) is
-   within reach of models several times larger, while the gap between the two
-   ColSmol variants is larger than between some full-size families.
+## 2. Translating the query only hurts the small encoders
 
-Full per-model tables: **[`results/SUMMARY.md`](results/SUMMARY.md)**.
-Read **[`results/README.md`](results/README.md) before quoting any number** — it
-lists the design's real limitations (single seed, linear-gain nDCG, MAP capped
-at `top_k=10`, no latency instrumentation).
+![Query-language robustness at a fixed index](assets/query_language.png)
 
-One caveat worth stating up front: Track B's queries are generated from page
-**text**, which structurally favours text retrievers. The ColVision lead there
-is therefore a *lower bound*. Track A uses ViDoRe's human-validated,
-vision-grounded queries and is free of that bias.
+Re-asking the same 160 questions in four languages **against the index built for
+English** (ViDoRe v2's official multilingual queries, not a single page re-embedded)
+costs the four large encoders at most 0.09 nDCG@5. The two ColSmol models lose up to
+0.27 — ColSmol-256M falls from 0.358 to 0.093. Multilingual query understanding is the
+first thing model compression sacrifices.
 
-## The two studies
+## 3. On text-grounded queries the margin shrinks — but does not flip
 
-| | Track A | Track B |
-| --- | --- | --- |
-| Corpus | ViDoRe v2 `biomedical_lectures_eng_v2` | Native-language biomedical literature |
-| Languages | English | EN · FR · ZH · DE · ES |
-| Queries | ViDoRe's own, human-validated, vision-grounded | Generated from page text, **always English** |
-| Relevance | Graded, multi-page qrels | Single gold page |
-| Cells | 6 models + 2 baselines | 6 models × 5 languages + 2 baselines |
+![nDCG@5 across five native-language corpora](assets/multilingual_heatmap.png)
 
-Non-English corpora are **natively written** in their language — PMC OA filtered
-on `<Language>[Language]`, French from HAL theses. Nothing is translated.
-Queries stay English throughout Track B, making it a genuine *cross-lingual*
-test: English query, non-English document.
+A second study uses natively-written biomedical literature in five languages (PMC OA
+filtered on `<Language>[Language]`; French from HAL theses — **nothing is translated**),
+with English queries throughout, so retrieval is genuinely cross-lingual. Here the
+queries are generated by Qwen2.5-32B-Instruct from **extracted page text**, which makes
+them answerable without the image and structurally favours a text retriever.
 
-A third slice re-queries Track A's fixed index with translated FR/DE/ES queries
-(`track_b_vidore/`), which separates *corpus* effects from *query-language*
-effects.
+Even so, the best encoder beats the best text pipeline in all five languages. The
+measured margin is a *floor*, not a ceiling. Two side findings:
 
-Metrics: nDCG@{1,5,10}, Recall@{1,5,10}, Precision@{1,5,10}, MRR, MAP@10.
+- **No single encoder dominates.** ColQwen2.5 leads on EN/FR/ZH, ColGemma3 on DE/ES.
+- **mmore's out-of-the-box text path is not cross-lingual-robust.** Its hybrid fuses a
+  multilingual dense encoder with an **English** SPLADE sparse model. That helps in
+  English (0.812 vs 0.734 dense) and hurts everywhere else, collapsing on Chinese
+  (0.372 vs 0.639). Routing by detected language — hybrid for English, dense elsewhere —
+  is the obvious fix.
 
-## Models
+Full per-model tables: **[`results/SUMMARY.md`](results/SUMMARY.md)**, generated from
+the records by `scripts/summarize_results.py` and never edited by hand.
+
+---
+
+## What was built
+
+The benchmark is the deliverable, but most of the work is the harness around it.
+
+- **A fixed-pipeline harness.** Index, reranker, embedding loader and retrieval
+  contract are held constant; only the encoder and the corpus vary. Each cell shells out
+  to mmore's real `process → index → retrieve` CLI and scores the ranked lists into one
+  `BenchmarkRecord` JSON.
+- **Cluster execution without SLURM.** EPFL RCP is Kubernetes + Run:AI + Harbor.
+  Dependencies are not baked into the image: they install once into a venv on the scratch
+  PVC that every job activates, so image rebuilds stay cheap. Four venvs coexist because
+  their dependency graphs genuinely conflict (see the table below).
+- **Corpus connectors.** PMC OA (with a native-language filter and a visual-density
+  filter), HAL open-access theses, and a ViDoRe v2 adapter that reconstructs one PDF per
+  document — sized so mmore's 200-dpi re-render reproduces the original pixels — so an
+  image-only dataset flows through a PDF pipeline unchanged.
+- **Query generation served in-house.** Qwen2.5-32B-Instruct on vLLM with guided-JSON
+  decoding and few-shot priming, prompted per page, with the document language and the
+  query language as separate parameters.
+- **OCR for the image-only corpus.** ViDoRe pages carry no text layer, so the text
+  baselines read mmore's own Marker+Surya OCR output rather than a shortcut extraction.
+- **Provenance in every number.** Each record stores the mmore commit, the queryset
+  SHA-256 and the corpus manifest hash. Every table and figure in this README is
+  regenerated from those records by a script.
+
+## Methodological honesty
+
+The most important result in this repo is one that had to be retracted and re-derived.
+
+An earlier version of this benchmark reported that text retrieval beat every visual
+encoder by 2–4×. It was **a scoring bug**: query generation numbered pages from 0 while
+mmore emits `page_num + 1`, so ColVision runs were graded against the page *before* the
+relevant one — a perfect run scored 0. The text baselines were self-consistent and
+therefore correct, which is exactly what made the artefact look like a finding. Fixed in
+`353c076`; all 30 multilingual cells were re-scored from the stored ranked lists (no
+model was re-run — the ranking never depended on the id convention), and a regression
+test now asserts that a perfect run on mmore's *real* output format scores nDCG@1 = 1.0.
+
+Other limits are stated in full in [`results/README.md`](results/README.md) and should be
+read before quoting any number here. In short: one seed, so the bootstrap intervals in
+`results.aggregate` collapse to zero width and are **not** confidence intervals; nDCG
+uses a linear rather than exponential gain, so these figures are not directly comparable
+to the published ViDoRe leaderboard; MAP and Recall are capped by `top_k=10`; latency and
+VRAM are not instrumented, so the cost figures above are wall-clock on a shared,
+non-isolated GPU; the two studies differ in corpus *and* in query grounding, so the
+grounding effect is not isolated at fixed corpus.
+
+## Models and baselines
 
 | id | HF checkpoint | family | backbone |
 | --- | --- | --- | --- |
-| `colpali_v1_3` | `vidore/colpali-v1.3` | ColPali | PaliGemma |
-| `colqwen2_v1_0` | `vidore/colqwen2-v1.0` | ColQwen2 | Qwen2-VL |
 | `colqwen2_5_v0_2` | `vidore/colqwen2.5-v0.2` | ColQwen2.5 | Qwen2.5-VL |
 | `colgemma3_colnetra` | `Cognitive-Lab/ColNetraEmbed` | ColGemma3 | Gemma 3 |
+| `colqwen2_v1_0` | `vidore/colqwen2-v1.0` | ColQwen2 | Qwen2-VL |
+| `colpali_v1_3` | `vidore/colpali-v1.3` | ColPali | PaliGemma |
 | `colsmol_500m` | `vidore/colSmol-500M` | ColSmol | SmolVLM |
 | `colsmol_256m` | `vidore/colSmol-256M` | ColSmol | SmolVLM |
 
-Baselines: **dense** — `BAAI/bge-m3`, page-level, cosine over normalised
-embeddings. **mmore hybrid** — mmore's own `Indexer`/`Retriever` (dense +
-SPLADE, `hybrid_search_weight=0.5`, reranker off), i.e. what a user gets from
-mmore's text pipeline out of the box.
+**dense** — `BAAI/bge-m3`, one embedding per page. **mmore hybrid** — mmore's own
+`Indexer`/`Retriever` (dense + SPLADE, `hybrid_search_weight=0.5`, reranker off): what a
+user gets from mmore's text pipeline out of the box.
+
+Metrics: nDCG@{1,5,10}, Recall@{1,5,10}, Precision@{1,5,10}, MRR, MAP@10.
 
 ---
 
-## Reproducing the benchmark
+## Reproducing
 
-### 1. Local environment
-
-Python 3.11 (pinned: `>=3.11,<3.12`) and [uv](https://docs.astral.sh/uv/).
+Python 3.11 and [uv](https://docs.astral.sh/uv/). Every table and figure re-derives from
+the committed records on CPU alone:
 
 ```bash
-scripts/setup.sh          # CPU-only: enough for tests, metrics, reporting
+scripts/setup.sh
 .venv/bin/python -m pytest tests -q
-```
-
-This is sufficient to re-derive every table from the committed records:
-
-```bash
 .venv/bin/python scripts/summarize_results.py   # rebuilds results/SUMMARY.md
+.venv/bin/python scripts/make_figures.py        # rebuilds assets/*.png, report/figures/*.pdf
 ```
 
-Running the models themselves needs GPUs. `scripts/setup.sh --gpu` adds the CUDA
-wheels for a single GPU machine; the cluster path below is what actually
-produced the published numbers.
-
-### 2. Cluster setup (EPFL RCP — Kubernetes + Run:AI, no SLURM)
+Running the models needs GPUs. On EPFL RCP (Kubernetes + Run:AI, no SLURM):
 
 ```bash
-./scripts/rcp/setup.sh            # builds + pushes the image, writes .rcp-env
+./scripts/rcp/setup.sh                  # builds + pushes the image, writes .rcp-env
 ./scripts/rcp/bootstrap-venv.sh --wait
-```
 
-Dependencies are **not** baked into the Docker image: they install once into a
-venv on the scratch PVC, and every job activates it. Rebuilding the image is
-therefore cheap.
-
-Four venvs exist on scratch, because their dependencies genuinely conflict:
-
-| venv | Purpose | Why separate |
-| --- | --- | --- |
-| `bcv-venv` | ColVision runs, metrics | pins `transformers==5.3.0` (required for correct ColVision weight loading) |
-| `bcv-venv-vllm` | Query generation | latest vLLM is built for CUDA 13; the image is CUDA 12.x |
-| `bcv-venv-mmoretext` | mmore hybrid baseline | SPLADE calls `batch_encode_plus`, removed in transformers 5.x → needs 4.x |
-| `bcv-venv-mmoreprocess` | ViDoRe OCR (Marker+Surya) | heavy `mmore[process]` extra, unused elsewhere |
-
-`bootstrap-venv.sh` creates the first two. The last two are built on demand, by
-running `uv venv` against the same scratch path and installing `mmore[rag]`
-(without the `colvision` extra, so `transformers` resolves to 4.x) or
-`mmore[process]` respectively.
-
-### 3. Build the corpora
-
-```bash
-./scripts/rcp/submit.sh corpus-vidore               # Track A: ViDoRe v2 → PDFs + graded qrels
-./scripts/rcp/submit.sh corpus-lang <lang> 150 0   # Track B: PMC OA, native language
-./scripts/rcp/submit.sh corpus-fr 100 0            # Track B French: HAL theses
-```
-
-Each language is then capped to a comparable sub-corpus (50 PDFs / 500 pages)
-by `scripts/rcp/materialize_tb_lang.py`. Corpus sampling is seeded end to end,
-and `bcv-corpus verify` re-hashes a local corpus against its manifest.
-
-### 4. Generate Track B queries
-
-```bash
+./scripts/rcp/submit.sh corpus-vidore           # ViDoRe v2 → PDFs + graded qrels
+./scripts/rcp/submit.sh corpus-lang <lang> 150 0  # PMC OA, native language
+./scripts/rcp/submit.sh corpus-fr 100 0         # HAL theses
 ./scripts/rcp/submit.sh gen-tb <lang> <manifest> <pdfs_dir> <out.jsonl>
+
+./scripts/rcp/submit.sh all                     # smoke + every cell
 ```
 
-Serves `Qwen/Qwen2.5-32B-Instruct` on vLLM and prompts it per page, with
-`--query-language en` so questions stay English whatever the document language.
-Track A needs no generation: ViDoRe ships its own validated queries.
-
-### 5. Run the cells
-
-```bash
-./scripts/rcp/submit.sh smoke                          # one cell, sanity check
-./scripts/rcp/submit.sh track-a <model> 0
-./scripts/rcp/submit.sh track-b <model> <lang> 0
-./scripts/rcp/submit.sh baseline B <lang>              # dense text baseline
-./scripts/rcp/submit.sh baseline-vidore <dense|mmore>
-./scripts/rcp/submit.sh all                            # smoke + every cell
-```
-
-Each cell runs mmore `process → index → retrieve`, then scores the ranked lists
-into a `BenchmarkRecord` at `results/<study>/<model>/<axis>/seed_<n>.json`.
+Each language is capped to a comparable sub-corpus (50 PDFs / 500 pages) by
+`scripts/rcp/materialize_tb_lang.py`; sampling is seeded end to end, and
+`bcv-corpus verify` re-hashes a local corpus against its manifest.
 
 > **Re-running a cell:** purge it first —
 > `rm -rf data/track_b_<l>/{milvus/<m>_<l>.db,process/<m>_<l>,retrieve/<m>_<l>}`.
-> A partial Milvus database makes `retrieve` hang silently for hours. Cells are
-> isolated by `cell_id=<model>_<lang>`, so purging one is safe while others run.
+> A partial Milvus database makes `retrieve` hang silently for hours. Cells are isolated
+> by `cell_id=<model>_<lang>`, so purging one is safe while others run.
 
-### 6. Tables and figures
+### The four scratch venvs
 
-```bash
-.venv/bin/python scripts/summarize_results.py
-bcv-report figures-a --results-dir results/track_a --out-dir report/figures
-bcv-report figures-b --results-dir results/track_b --out-dir report/figures
-```
+| venv | Purpose | Why separate |
+| --- | --- | --- |
+| `bcv-venv` | ColVision runs, metrics | pins `transformers==5.3.0`, required for correct ColVision weight loading |
+| `bcv-venv-vllm` | Query generation | current vLLM is built for CUDA 13; the image is CUDA 12.x |
+| `bcv-venv-mmoretext` | mmore hybrid baseline | SPLADE calls `batch_encode_plus`, removed in transformers 5.x → needs 4.x |
+| `bcv-venv-mmoreprocess` | ViDoRe OCR (Marker+Surya) | heavy `mmore[process]` extra, unused elsewhere |
 
-## CLIs
+### CLIs and layout
 
 | Command | Purpose |
 | --- | --- |
 | `bcv-corpus` | Corpus download, language + visual-density filters, manifest build/verify |
 | `bcv-queries` | Query generation (inverse-query prompting) and ambiguity filtering |
 | `bcv-run` | Orchestrate mmore `process → index → retrieve` and score a cell |
-| `bcv-report` | Figures and LaTeX tables from the result JSONs |
-
-## Repo layout
+| `bcv-report` | LaTeX tables and per-study figures from the result JSONs |
 
 ```
-configs/          Model and per-track YAML (one file per Track B language)
+configs/          Model and per-corpus YAML
 results/          BenchmarkRecords + generated SUMMARY.md + caveats README
-scripts/
-  setup.sh                Local uv environment
-  summarize_results.py    Rebuild results/SUMMARY.md from the records
-  rcp/                    Run:AI image build, venv bootstrap, job submission
-  rcp/debug/              One-off diagnostic probes
+assets/           README figures, generated by scripts/make_figures.py
+scripts/          Local setup, summariser, figure generation, rcp/ job submission
 src/benchmark_colvision/
   corpus/         PMC OA / HAL / ViDoRe ingestion, filters, manifests, OCR
   queries/        LLM query generation, schema, page enumeration
   runners/        mmore CLI wrapper, orchestrators, text baselines
   evaluation/     Retrieval metrics, statistical tests
-  reporting/      Figures and LaTeX tables
+  reporting/      LaTeX tables and per-study figures
 tests/            120 tests; subprocess and GPU calls are mocked
 ```
 
-## Reproducibility notes
-
-- `pyproject.toml` pins mmore to commit `4102f96` of `Gsharpp/mmore`
-  (`colvision` extra). That branch carried PR #305 (ColVision support), since
-  merged upstream into `swiss-ai/mmore` — the pin can move there directly.
-- `uv.lock` is committed and resolves the full dependency graph.
-- Every record stores the mmore commit, model id, seed, queryset SHA-256 and
-  corpus manifest hash, so a number traces back to what produced it.
-- Corpus sampling, query generation and cell execution are seeded.
-- **One document-id convention end to end.** mmore emits
-  `<pdf>#page=<1-based>`; `SyntheticQuery.mmore_doc_id()` maps every queryset
-  into that space, so ColVision cells and text baselines are scored in the same
-  id space and are directly comparable. A regression test asserts that a perfect
-  run on mmore's *real* output format scores nDCG@1 = 1.0 — an earlier
-  off-by-one here silently graded ColVision against the wrong page and inverted
-  the headline finding.
-
-## Limitations
-
-Stated plainly, and in full, in [`results/README.md`](results/README.md). The
-short version: one seed (so the bootstrap intervals in `results.aggregate`
-collapse to zero width and are **not** confidence intervals), nDCG computed with
-a linear rather than exponential gain (so Track A figures are not directly
-comparable to the published ViDoRe leaderboard), MAP and Recall capped by
-`top_k=10`, no latency or VRAM instrumentation, and no generation metrics.
+`pyproject.toml` pins mmore to commit `4102f96` of `Gsharpp/mmore` (`colvision` extra).
+That branch carried PR #305, ColVision support, since merged upstream into
+`swiss-ai/mmore` — the pin can move there directly. `uv.lock` is committed.
 
 ## License
 
