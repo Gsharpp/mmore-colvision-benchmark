@@ -40,6 +40,31 @@ SMALL = {"colsmol_256m", "colsmol_500m"}
 LANG_LABELS = {"en": "EN", "fr": "FR", "zh": "ZH", "de": "DE", "es": "ES"}
 VIDORE_LANG_LABELS = {"english": "EN", "french": "FR", "german": "DE", "spanish": "ES"}
 
+# The same figures serve two documents in two languages: the French report
+# (vector PDF) and the English README (raster PNG). Every string a reader sees
+# goes through t(), and every number through num(), which switches the decimal
+# separator with it. Rendering happens once per language, see main().
+LANG = "fr"
+STRINGS = {
+    "quality": {"fr": "(a) Qualité de recherche", "en": "(a) Retrieval quality"},
+    "cost": {"fr": "(b) Coût d'une requête", "en": "(b) Cost of one query"},
+    "cost_axis": {"fr": "temps de recherche par requête (s)",
+                  "en": "retrieval time per query (s)"},
+    "query_lang_axis": {"fr": "langue de la requête", "en": "query language"},
+    "big_four": {"fr": "4 gros encodeurs", "en": "4 large encoders"},
+    "colsmol": {"fr": "ColSmol", "en": "ColSmol"},
+}
+
+
+def t(key: str) -> str:
+    return STRINGS[key][LANG]
+
+
+def num(value: float, digits: int) -> str:
+    """Format a number for the current language (French uses a decimal comma)."""
+    out = f"{value:.{digits}f}"
+    return out.replace(".", ",") if LANG == "fr" else out
+
 # Light-surface values from the reference palette; slots 1 and 2 clear every
 # all-pairs gate (worst CVD dE 24.7, normal-vision 33.6).
 BLUE = "#2a78d6"
@@ -103,15 +128,21 @@ def bare(ax, *, grid_axis: str | None = "y", keep=("left", "bottom")) -> None:
 
 
 def save(fig, stem: str, title: str) -> None:
-    PDF_DIR.mkdir(parents=True, exist_ok=True)
-    PNG_DIR.mkdir(parents=True, exist_ok=True)
-    fig.savefig(PDF_DIR / f"{stem}.pdf", bbox_inches="tight", pad_inches=0.02)
-    # The PNG stands alone in the README, with no LaTeX caption to name it.
-    fig.suptitle(title, fontsize=9.5, fontweight="bold", color=INK,
-                 x=0.0, y=1.05, ha="left")
-    fig.savefig(PNG_DIR / f"{stem}.png", dpi=200, bbox_inches="tight", pad_inches=0.06)
+    if LANG == "fr":
+        # The report names its figures in a LaTeX caption, so no title here.
+        PDF_DIR.mkdir(parents=True, exist_ok=True)
+        fig.savefig(PDF_DIR / f"{stem}.pdf", bbox_inches="tight", pad_inches=0.02)
+        written = f"{stem}.pdf"
+    else:
+        # The PNG stands alone in the README, with no caption to name it.
+        PNG_DIR.mkdir(parents=True, exist_ok=True)
+        fig.suptitle(title, fontsize=9.5, fontweight="bold", color=INK,
+                     x=0.0, y=1.05, ha="left")
+        fig.savefig(PNG_DIR / f"{stem}.png", dpi=200, bbox_inches="tight",
+                    pad_inches=0.06)
+        written = f"{stem}.png"
     plt.close(fig)
-    print(f"wrote {stem}.pdf / {stem}.png")
+    print(f"wrote {written}")
 
 
 # --- Figure 1: quality and cost on the biomedical lecture corpus -------------
@@ -132,13 +163,13 @@ def fig_quality_and_cost() -> None:
     ax1.barh(ys, [scores[m] for m in order], height=0.58,
              color=[colour(m) for m in order], zorder=3)
     for y, m in zip(ys, order):
-        ax1.text(scores[m] + 0.012, y, f"{scores[m]:.3f}", va="center",
+        ax1.text(scores[m] + 0.012, y, num(scores[m], 3), va="center",
                  fontsize=7.5, color=INK_2, zorder=5,
                  bbox=dict(facecolor="white", edgecolor="none", pad=0.8))
     for label, value in text.items():
         ax1.axvline(value, color=MUTED, linewidth=0.9, linestyle=(0, (3, 2.5)), zorder=2)
     ax1.text(max(text.values()) + 0.012, -0.95,
-             "  ·  ".join(f"{label} {value:.3f}"
+             "  ·  ".join(f"{label} {num(value, 3)}"
                           for label, value in sorted(text.items(), key=lambda kv: -kv[1])),
              fontsize=6.8, color=MUTED, va="center")
     ax1.set_yticks(list(ys))
@@ -146,7 +177,7 @@ def fig_quality_and_cost() -> None:
     ax1.set_ylim(-1.5, len(order) - 0.4)
     ax1.set_xlim(0, 0.72)
     ax1.set_xlabel("nDCG@5")
-    ax1.set_title("(a) Qualité de recherche", loc="left", color=INK, pad=6)
+    ax1.set_title(t("quality"), loc="left", color=INK, pad=6)
     bare(ax1, grid_axis="x", keep=("left",))
 
     # (b) the same six models, quality against what a query costs.
@@ -167,9 +198,9 @@ def fig_quality_and_cost() -> None:
     span = max(costs.values()) - min(costs.values())
     ax2.set_xlim(min(costs.values()) - 0.16 * span, max(costs.values()) + 0.44 * span)
     ax2.set_ylim(0.30, 0.72)
-    ax2.set_xlabel("temps de recherche par requête (s)")
+    ax2.set_xlabel(t("cost_axis"))
     ax2.set_ylabel("nDCG@5")
-    ax2.set_title("(b) Coût d'une requête", loc="left", color=INK, pad=6)
+    ax2.set_title(t("cost"), loc="left", color=INK, pad=6)
     bare(ax2, grid_axis="both")
 
     fig.tight_layout(w_pad=2.4)
@@ -191,14 +222,14 @@ def fig_query_language() -> None:
         ax.plot(range(len(steps)), ys, marker="o", markersize=3.8, linewidth=1.4,
                 color=colour(m), zorder=3, markeredgecolor="white",
                 markeredgewidth=0.7, clip_on=False)
-    ax.annotate("4 gros encodeurs", (0.04, 0.665), fontsize=7.5, color=BLUE)
-    ax.annotate("ColSmol", (0.72, 0.215), fontsize=7.5, color=ORANGE)
+    ax.annotate(t("big_four"), (0.04, 0.665), fontsize=7.5, color=BLUE)
+    ax.annotate(t("colsmol"), (0.72, 0.215), fontsize=7.5, color=ORANGE)
     ax.set_xticks(range(len(steps)))
     ax.set_xticklabels([VIDORE_LANG_LABELS[s] for s in steps], color=INK_2)
     ax.set_xlim(-0.08, len(steps) - 0.92)
     ax.set_ylim(0, 0.72)
     ax.set_ylabel("nDCG@5")
-    ax.set_xlabel("langue de la requête")
+    ax.set_xlabel(t("query_lang_axis"))
     bare(ax)
     save(fig, "query_language",
          "Only the small encoders lose the query language")
@@ -227,7 +258,7 @@ def fig_multilingual_heatmap() -> None:
                                        edgecolor="white", linewidth=1.6, zorder=2))
             r, g, b, _ = cmap(norm(v))
             luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
-            ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=7.2,
+            ax.text(j, i, num(v, 2), ha="center", va="center", fontsize=7.2,
                     zorder=3, color="white" if luminance < 0.45 else INK)
 
     ax.set_xticks(range(len(LANGS)))
@@ -250,9 +281,11 @@ def fig_multilingual_heatmap() -> None:
 
 
 def main() -> None:
-    fig_quality_and_cost()
-    fig_query_language()
-    fig_multilingual_heatmap()
+    global LANG
+    for LANG in ("fr", "en"):
+        fig_quality_and_cost()
+        fig_query_language()
+        fig_multilingual_heatmap()
 
 
 if __name__ == "__main__":
