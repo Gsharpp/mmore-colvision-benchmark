@@ -477,24 +477,34 @@ cmd_track_b_native() {
     fi
 }
 
-cmd_track_b_native_serial() {
+cmd_track_b_serial() {
     # Repair path for track-b-native. Co-scheduling several cells of the same
     # language makes them read one Milvus index concurrently; the loser returns
     # nothing and the record lands with ndcg_at_5=null, or the cell hangs
     # outright. Here one job per language walks its models *in sequence*, and
     # each cell's retrieve output is purged first so a half-written directory
     # cannot be mistaken for a finished one.
-    # Usage: ./submit.sh track-b-native-serial <lang> <model> [model...]
+    # The same repair applies to track-b-phi4, so the suite is a parameter.
+    # Usage: ./submit.sh track-b-serial <native|phi4> <lang> <model> [model...]
+    local suite="$1"; shift
     local lang="$1"; shift
-    local seed=0
+    local seed=0 tag out_dir
+    case "${suite}" in
+        native) tag="tbnatser"; out_dir="retrieve_native" ;;
+        phi4)   tag="tbphiser"; out_dir="retrieve_phi4"   ;;
+        *) echo "suite inconnue: ${suite} (attendu: native|phi4)" >&2; return 1 ;;
+    esac
+    # English lives in data/track_b, the other languages in data/track_b_<lang>.
+    local data_dir="data/track_b_${lang}"
+    [ "${lang}" = "en" ] && data_dir="data/track_b"
     local steps=""
     for m in "$@"; do
         # Single line per step: RunAI strips backslash continuations.
-        steps="${steps} rm -rf data/track_b_${lang}/retrieve_native/${m} results/track_b_native/${m}/${lang} ;"
-        steps="${steps} bcv-run track-b --model-id ${m} --language ${lang} --seed ${seed} --config configs/track_b_${lang}_native.yaml --models configs/models.yaml --mmore-commit ${MMORE_REV} ;"
+        steps="${steps} rm -rf ${data_dir}/${out_dir}/${m} results/track_b_${suite}/${m}/${lang} ;"
+        steps="${steps} bcv-run track-b --model-id ${m} --language ${lang} --seed ${seed} --config configs/track_b_${lang}_${suite}.yaml --models configs/models.yaml --mmore-commit ${MMORE_REV} ;"
     done
-    steps="${steps} echo SERIAL_DONE_${lang}"
-    submit_one "bcv-tbnatser-${lang}-s${seed}" 1 "${steps}"
+    steps="${steps} echo SERIAL_DONE_${suite}_${lang}"
+    submit_one "bcv-${tag}-${lang}-s${seed}" 1 "${steps}"
 }
 
 cmd_track_b_phi4() {
@@ -603,7 +613,7 @@ case "${ACTION}" in
     track-a)         cmd_track_a "$@"    ;;
     track-b)         cmd_track_b "$@"    ;;
     track-b-native)  cmd_track_b_native "$@" ;;
-    track-b-native-serial) cmd_track_b_native_serial "$@" ;;
+    track-b-serial)  cmd_track_b_serial "$@" ;;
     track-b-phi4)    cmd_track_b_phi4 "$@" ;;
     all)             cmd_all             ;;
     help|--help|-h|*) cmd_help           ;;

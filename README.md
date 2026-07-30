@@ -16,7 +16,9 @@ Academic project (Cassiopée), Télécom SudParis, run on EPFL LiGHT's Run:AI cl
 
 ## 1. With vision-grounded queries, visual retrieval wins — and cost, not quality, separates the leaders
 
-![Retrieval quality and cost on ViDoRe v2 biomedical lectures](assets/quality_and_cost.png)
+![Retrieval quality on ViDoRe v2 biomedical lectures](assets/retrieval_quality.png)
+
+![Retrieval cost per query on ViDoRe v2 biomedical lectures](assets/retrieval_cost.png)
 
 On [ViDoRe v2](https://huggingface.co/datasets/vidore) biomedical lectures — 1,016
 figure-rich pages, 160 queries written by a model *looking at the page* and then
