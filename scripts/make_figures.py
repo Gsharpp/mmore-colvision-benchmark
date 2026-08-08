@@ -26,8 +26,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PDF_DIR = ROOT / "report" / "figures"
 PNG_DIR = ROOT / "assets"
 
-# Display names, and the two-way split the figures encode by colour: the four
-# large encoders against the two ColSmol ones.
+# Display names. Colour encodes the backbone family (see FAMILY below), so the
+# two Qwen encoders share a hue and the two ColSmol ones share another.
 LABELS = {
     "colqwen2_5_v0_2": "ColQwen2.5",
     "colgemma3_colnetra": "ColGemma3",
@@ -36,17 +36,15 @@ LABELS = {
     "colsmol_500m": "ColSmol-500M",
     "colsmol_256m": "ColSmol-256M",
 }
-SMALL = {"colsmol_256m", "colsmol_500m"}
-# Colour splits the two families; within a family the models share a hue, so
-# line style and marker carry the identity. Without this a six-entry legend
-# shows four identical blue swatches and names nothing.
+# The six encoders share one hue, so line style and marker carry the identity
+# on their own: every model needs a combination no other model uses.
 DASHES = {
     "colqwen2_5_v0_2": (None, "o"),
     "colgemma3_colnetra": ((0, (4, 1.6)), "s"),
     "colqwen2_v1_0": ((0, (1.4, 1.4)), "^"),
     "colpali_v1_3": ((0, (5, 1.4, 1.2, 1.4)), "D"),
-    "colsmol_500m": (None, "o"),
-    "colsmol_256m": ((0, (1.4, 1.4)), "^"),
+    "colsmol_500m": ((0, (2.6, 1.2)), "v"),
+    "colsmol_256m": ((0, (1, 1.2, 3.6, 1.2)), "P"),
 }
 LANG_LABELS = {"en": "EN", "fr": "FR", "zh": "ZH", "de": "DE", "es": "ES"}
 VIDORE_LANG_LABELS = {"english": "EN", "french": "FR", "german": "DE", "spanish": "ES"}
@@ -77,13 +75,31 @@ def num(value: float, digits: int) -> str:
     out = f"{value:.{digits}f}"
     return out.replace(".", ",") if LANG == "fr" else out
 
-# Calqué sur les figures du papier MMORE (report/examples/) : une seule teinte
-# d'accent et des neutres, plutôt qu'une opposition de deux couleurs vives. Les
-# six encodeurs portent l'orange — teinte pleine pour les quatre gros, teinte
-# claire pour les deux ColSmol — et les pipelines textuels, qui sont une
-# référence et non une série, restent en gris.
-ACCENT = "#1d4f96"
-ACCENT_SOFT = "#5599e0"
+# La couleur code la FAMILLE DE DORSALE, pas le rang ni la taille : les deux
+# ColQwen partagent une teinte, les deux ColSmol une autre. C'est la seule
+# partition des six qui soit une propriété des modèles et non de leurs scores,
+# donc la seule qui ne se repeigne pas quand les chiffres bougent.
+# Palette validée par scripts/validate_palette.js de la skill dataviz, en mode
+# all-pairs (la figure 2 est un nuage : toutes les paires se voisinent) : pire
+# écart CVD 11,0 et vision normale 16,3, au-dessus des planchers de 8 et 15.
+# Le rouge est la seule quatrième teinte retenue : l'orange, le marron et le
+# framboise ont été écartés par Mathieu, un second violet échoue (ΔE 3,8 contre
+# celui de Gemma-3) et le teal aussi. L'aqua passe sous 3:1 de contraste, ce que
+# couvrent l'étiquetage direct des figures 1 et 2 et les styles de trait de la
+# figure 3. Les pipelines textuels restent en gris : une référence, pas une série.
+FAM_BLUE = "#2a78d6"    # Qwen2-VL / Qwen2.5-VL
+FAM_VIOLET = "#4a3aa7"  # Gemma-3
+FAM_AQUA = "#1baf7a"    # PaliGemma
+FAM_RED = "#d32f2f"     # SmolVLM
+FAMILY = {
+    "colqwen2_5_v0_2": FAM_BLUE,
+    "colqwen2_v1_0": FAM_BLUE,
+    "colgemma3_colnetra": FAM_VIOLET,
+    "colpali_v1_3": FAM_AQUA,
+    "colsmol_500m": FAM_RED,
+    "colsmol_256m": FAM_RED,
+}
+ACCENT = FAM_BLUE
 DARK = "#2f2f2f"
 INK = "#111111"
 INK_2 = "#333333"
@@ -91,7 +107,10 @@ MUTED = "#5a5a5a"
 REF = "#7d7b76"
 REF_SOFT = "#d7d5cf"
 GRID = "#e6e5df"
-# Rampe séquentielle sur la même teinte, clair -> foncé.
+# Rampe séquentielle bleue, clair -> foncé, pour la carte. Une rampe neutre a
+# été essayée pour éviter que le bleu se lise comme « famille ColQwen » ; rendue,
+# elle est nettement moins lisible, et la carte code une magnitude, pas une
+# identité, donc la confusion reste théorique. Décision de Mathieu : bleu.
 SEQ = ["#eff5fd", "#dde9fa", "#c9dcf6", "#b4cef2", "#9ec0ee", "#88b2e9",
        "#72a4e4", "#5c96de", "#4784cd", "#3671b8", "#2960a6", "#1d4f96"]
 
@@ -127,8 +146,8 @@ plt.rcParams.update({
 
 
 def colour(model: str, *, soft: bool = False) -> str:
-    """Full accent for the four large encoders, a tint for the two ColSmol."""
-    return ACCENT_SOFT if model in SMALL else ACCENT
+    """One hue per backbone family; the two Qwen and the two ColSmol pair up."""
+    return FAMILY[model]
 
 
 def record(path: Path) -> dict:
@@ -139,6 +158,15 @@ def per_query_s(path: Path) -> float:
     """Retrieval wall-clock per query. The only timing the records expose."""
     rec = record(path)
     return rec["performance"]["retrieve_duration_total_s"] / rec["retrieval"]["n_queries"]
+
+
+_NUMBER_WORDS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six",
+                 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
+
+
+def spell(n: int) -> str:
+    """Number words for figure titles, so a title never contradicts its data."""
+    return _NUMBER_WORDS.get(n, str(n))
 
 
 def bare(ax, *, grid_axis: str | None = "y", keep=("left", "bottom")) -> None:
@@ -225,38 +253,59 @@ def fig_retrieval_quality() -> None:
     ax.set_xlabel("nDCG@5")
     bare(ax, grid_axis="x", keep=("left",))
 
+    n_beat = sum(1 for v in scores.values() if v > max(text.values()))
     save(fig, "retrieval_quality",
-         "Four of six visual encoders beat text retrieval")
+         f"{spell(n_beat).capitalize()} of {spell(len(scores))} visual encoders "
+         "beat text retrieval")
 
 
 def fig_retrieval_cost() -> None:
     scores = {m: ndcg5(RESULTS / "track_a" / m / "full" / "seed_0.json") for m in MODELS}
     costs = {m: per_query_s(RESULTS / "track_a" / m / "full" / "seed_0.json") for m in MODELS}
 
-    fig, ax = plt.subplots(figsize=(3.35, 1.95))
-    offsets = {
-        "colgemma3_colnetra": ((0, 10), "center"),
-        "colpali_v1_3": ((0, -12), "center"),
-        "colqwen2_v1_0": ((-2, 10), "center"),
-        "colqwen2_5_v0_2": ((0, -11), "center"),
+    refs = {label: ndcg5(RESULTS / d / "A" / "vidore" / "seed_0.json")
+            for d, label in BASELINES.items()}
+
+    fig, ax = plt.subplots(figsize=(3.35, 2.15))
+    # The two text pipelines are the comparison the whole report turns on, so
+    # the cost plot carries them too — as rules, not as points: they have no
+    # cost on this axis.
+    for label, value in refs.items():
+        ax.axhline(value, color=REF, linewidth=0.8, linestyle=(0, (3, 2)),
+                   zorder=1)
+        ax.annotate(label, (0.35, value), textcoords="offset points",
+                    xytext=(0, 3), ha="left", va="bottom", fontsize=6.8,
+                    color=REF, style="italic")
+
+    # One convention: the label sits to the right of its point, at a fixed
+    # offset. It moves only where the right side is already taken, and then by
+    # the same amount in the next free direction — above, below, or left for
+    # the two ColSmol, which sit against the right edge of the axes.
+    placement = {
+        "colqwen2_v1_0": ((0, 9), "center"),      # ColQwen2.5 is just downstream
+        "colpali_v1_3": ((0, -9), "center"),      # under ColQwen2
         "colsmol_500m": ((-7, 0), "right"),
         "colsmol_256m": ((-7, 0), "right"),
     }
     for m in MODELS:
-        offset, ha = offsets[m]
+        offset, ha = placement.get(m, ((7, 0), "left"))
         ax.scatter(costs[m], scores[m], s=40, color=colour(m), zorder=3,
                    edgecolor="white", linewidth=0.9)
         ax.annotate(LABELS[m], (costs[m], scores[m]), textcoords="offset points",
                     xytext=offset, ha=ha, va="center", fontsize=7.5, color=INK_2)
-    span = max(costs.values()) - min(costs.values())
-    ax.set_xlim(min(costs.values()) - 0.22 * span, max(costs.values()) + 0.12 * span)
-    ax.set_ylim(0.30, 0.74)
+
+    ax.set_xlim(0, max(costs.values()) * 1.12)
+    lo = min([*scores.values(), *refs.values()])
+    hi = max(scores.values())
+    ax.set_ylim(lo - 0.06, hi + 0.04)
     ax.set_xlabel(t("cost_axis"))
     ax.set_ylabel("nDCG@5")
     bare(ax, grid_axis="both")
 
+    ratio = max(costs.values()) / min(costs.values())
     save(fig, "retrieval_cost",
-         "Cost per query spreads four-fold, and not by model size")
+         f"Cost per query spreads more than {spell(int(ratio))}-fold, "
+         "and not by model size")
 
 
 # --- Figure 2: query language, index unchanged -------------------------------
@@ -271,31 +320,30 @@ def fig_query_language() -> None:
             for lang in VIDORE_LANGS
         ]
         dash, marker = DASHES[m]
-        # One reading key across every figure: the ColSmol pair always wears the
-        # light tint. A tint is fainter than the full accent at the same weight,
-        # so their lines are drawn thicker rather than recoloured.
+        # Colour names the family; within a family the two members are told
+        # apart by dash pattern and marker, so every line carries one weight.
         ax.plot(range(len(steps)), ys, marker=marker, markersize=3.6,
-                linewidth=1.9 if m in SMALL else 1.3,
+                linewidth=1.5,
                 linestyle=dash if dash else "-",
                 color=colour(m), zorder=3, markeredgecolor="white",
                 markeredgewidth=0.6, clip_on=False, label=LABELS[m])
-    # Six lines in two colours cannot be told apart by colour alone, so the
-    # group annotations are replaced by a real legend naming every model.
-    # Below the axes, centred: inside the frame the box sat on top of the
-    # ColSmol curves and hid the very data the figure is about.
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.26), ncol=2,
-              handlelength=2.2, handletextpad=0.5, columnspacing=1.4,
-              fontsize=7, borderpad=0.45, labelspacing=0.32, labelcolor=INK)
+    # Six lines cannot be told apart by colour alone — two families hold two
+    # models each — so a real legend names every model. It sits inside the
+    # frame, in the band above the curves: no line rises past 0.63, so the top
+    # of the panel is free and the legend costs no figure height.
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.005), ncol=3,
+              handlelength=2.0, handletextpad=0.45, columnspacing=1.0,
+              fontsize=6.6, borderpad=0.4, labelspacing=0.28, labelcolor=INK)
     ax.set_xticks(range(len(steps)))
     ax.set_xticklabels([VIDORE_LANG_LABELS[s] for s in steps], color=INK_2)
     ax.set_xlim(-0.08, len(steps) - 0.92)
-    ax.set_ylim(0, 0.72)
+    ax.set_ylim(0, 0.92)
     ax.set_ylabel("nDCG@5")
     ax.set_xlabel(t("query_lang_axis"))
     bare(ax)
     save(fig, "query_language",
          "Only the small encoders lose the query language",
-         box=dict(left=0.285, right=0.975, top=0.965, bottom=0.44))
+         box=dict(left=0.285, right=0.975, top=0.965, bottom=0.19))
 
 
 # --- Figure 3: native-language corpora ---------------------------------------
@@ -321,6 +369,7 @@ def fig_multilingual_heatmap() -> None:
             ax.add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1, fill=False,
                                        edgecolor="white", linewidth=1.6, zorder=2))
             r, g, b, _ = cmap(norm(v))
+            # Flip to white only where black ink would drop under ~4.5:1.
             luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
             ax.text(j, i, num(v, 2), ha="center", va="center", fontsize=7.6,
                     zorder=3, color="white" if luminance < 0.45 else INK)
@@ -339,6 +388,9 @@ def fig_multilingual_heatmap() -> None:
         ax.spines[side].set_visible(False)
     # A visible gap between the encoders and the text reference rows.
     ax.axhline(len(MODELS) - 0.5, color="white", linewidth=4.5, zorder=4)
+
+    # No colour bar: every cell prints its own value, so the scale would only
+    # restate what the reader already has, and it costs a fifth of the width.
 
     save(fig, "multilingual_heatmap",
          "In all five languages the best encoder beats both text pipelines",
