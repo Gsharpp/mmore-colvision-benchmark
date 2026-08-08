@@ -87,67 +87,121 @@ def num(value: float, digits: int) -> str:
 # celui de Gemma-3) et le teal aussi. L'aqua passe sous 3:1 de contraste, ce que
 # couvrent l'étiquetage direct des figures 1 et 2 et les styles de trait de la
 # figure 3. Les pipelines textuels restent en gris : une référence, pas une série.
-FAM_BLUE = "#2a78d6"    # Qwen2-VL / Qwen2.5-VL
-FAM_VIOLET = "#4a3aa7"  # Gemma-3
-FAM_AQUA = "#1baf7a"    # PaliGemma
-FAM_RED = "#d32f2f"     # SmolVLM
-FAMILY = {
-    "colqwen2_5_v0_2": FAM_BLUE,
-    "colqwen2_v1_0": FAM_BLUE,
-    "colgemma3_colnetra": FAM_VIOLET,
-    "colpali_v1_3": FAM_AQUA,
-    "colsmol_500m": FAM_RED,
-    "colsmol_256m": FAM_RED,
+FAMILIES = ["qwen", "gemma3", "paligemma", "smolvlm"]
+FAMILY_OF = {
+    "colqwen2_5_v0_2": "qwen",
+    "colqwen2_v1_0": "qwen",
+    "colgemma3_colnetra": "gemma3",
+    "colpali_v1_3": "paligemma",
+    "colsmol_500m": "smolvlm",
+    "colsmol_256m": "smolvlm",
 }
-ACCENT = FAM_BLUE
-DARK = "#2f2f2f"
-INK = "#111111"
-INK_2 = "#333333"
-MUTED = "#5a5a5a"
-REF = "#7d7b76"
-REF_SOFT = "#d7d5cf"
-GRID = "#e6e5df"
-# Rampe séquentielle bleue, clair -> foncé, pour la carte. Une rampe neutre a
-# été essayée pour éviter que le bleu se lise comme « famille ColQwen » ; rendue,
-# elle est nettement moins lisible, et la carte code une magnitude, pas une
-# identité, donc la confusion reste théorique. Décision de Mathieu : bleu.
-SEQ = ["#eff5fd", "#dde9fa", "#c9dcf6", "#b4cef2", "#9ec0ee", "#88b2e9",
-       "#72a4e4", "#5c96de", "#4784cd", "#3671b8", "#2960a6", "#1d4f96"]
 
-# Les six encodeurs partagent une teinte : le style de trait et le marqueur
-# portent l'identité. Sans cela une légende de six entrées montre quatre
-# pastilles identiques et ne nomme rien.
-plt.rcParams.update({
-    # TeX Gyre Termes is the Times clone newtxtext sets the body in, so the
-    # figures and the text share one typeface instead of merely both being
-    # serif. Math (the @ in nDCG@5, subscripts) follows with the STIX set.
-    "font.family": "serif",
-    "font.serif": ["TeX Gyre Termes", "Nimbus Roman", "Liberation Serif"],
-    "mathtext.fontset": "stix",
-    "font.size": 9,
-    "axes.labelsize": 9,
-    "axes.titlesize": 9,
-    "xtick.labelsize": 8,
-    "ytick.labelsize": 8,
-    "axes.labelcolor": INK,
-    "text.color": INK,
-    "xtick.color": INK_2,
-    "ytick.color": INK_2,
-    "axes.edgecolor": INK_2,
-    "axes.linewidth": 0.7,
-    "legend.frameon": True,
-    "legend.edgecolor": INK_2,
-    "legend.facecolor": "white",
-    "legend.framealpha": 1.0,
-    "legend.fancybox": False,
-    "figure.facecolor": "white",
-    "savefig.facecolor": "white",
-})
+
+class Theme:
+    """One palette. The PDF the report embeds is always the light one; the
+    README additionally ships a dark twin, because GitHub renders it on a near
+    black canvas and a white figure box punches a hole in the page.
+
+    The dark theme is not an inversion: the four family hues are lifted so they
+    still separate against a dark ground, and the sequential ramp is rebuilt
+    dark-to-bright rather than reversed, so magnitude still reads upward.
+    """
+
+    def __init__(self, name, bg, ink, ink_2, muted, ref, ref_soft, hues, seq):
+        self.name = name
+        self.bg, self.ink, self.ink_2, self.muted = bg, ink, ink_2, muted
+        self.ref, self.ref_soft = ref, ref_soft
+        self.hues, self.seq = hues, seq
+
+    @property
+    def suffix(self) -> str:
+        return "" if self.name == "light" else f"-{self.name}"
+
+
+LIGHT = Theme(
+    "light",
+    bg="white", ink="#111111", ink_2="#333333", muted="#5a5a5a",
+    ref="#7d7b76", ref_soft="#d7d5cf",
+    hues=dict(qwen="#2a78d6", gemma3="#4a3aa7", paligemma="#1baf7a", smolvlm="#d32f2f"),
+    # Rampe séquentielle bleue, clair -> foncé. Une rampe neutre a été essayée
+    # pour éviter que le bleu se lise comme « famille ColQwen » ; rendue, elle
+    # est nettement moins lisible, et la carte code une magnitude, pas une
+    # identité, donc la confusion reste théorique. Décision de Mathieu : bleu.
+    seq=["#eff5fd", "#dde9fa", "#c9dcf6", "#b4cef2", "#9ec0ee", "#88b2e9",
+         "#72a4e4", "#5c96de", "#4784cd", "#3671b8", "#2960a6", "#1d4f96"],
+)
+
+DARK = Theme(
+    "dark",
+    # GitHub's dark canvas, so the figure dissolves into the page instead of
+    # sitting on a plate.
+    bg="#0d1117", ink="#e6edf3", ink_2="#c9d1d9", muted="#8b949e",
+    ref="#9aa3ad", ref_soft="#30363d",
+    hues=dict(qwen="#58a0f0", gemma3="#9b8bf0", paligemma="#2fd39a", smolvlm="#f4736f"),
+    seq=["#11253c", "#152e4c", "#19375c", "#1e416d", "#234c7e", "#295890",
+         "#3065a3", "#3973b6", "#4482c8", "#5292da", "#63a3e9", "#7cb4f4"],
+)
+
+THEME = LIGHT
+# Rebound by apply_theme; the figure bodies read them as plain module globals.
+BG, INK, INK_2, MUTED, REF, REF_SOFT, SEQ = (
+    LIGHT.bg, LIGHT.ink, LIGHT.ink_2, LIGHT.muted, LIGHT.ref, LIGHT.ref_soft, LIGHT.seq
+)
+
+
+def apply_theme(theme: Theme) -> None:
+    global THEME, BG, INK, INK_2, MUTED, REF, REF_SOFT, SEQ
+    THEME = theme
+    BG, INK, INK_2 = theme.bg, theme.ink, theme.ink_2
+    MUTED, REF, REF_SOFT, SEQ = theme.muted, theme.ref, theme.ref_soft, theme.seq
+    plt.rcParams.update({
+        # TeX Gyre Termes is the Times clone newtxtext sets the body in, so the
+        # figures and the text share one typeface instead of merely both being
+        # serif. Math (the @ in nDCG@5, subscripts) follows with the STIX set.
+        "font.family": "serif",
+        "font.serif": ["TeX Gyre Termes", "Nimbus Roman", "Liberation Serif"],
+        "mathtext.fontset": "stix",
+        "font.size": 9,
+        "axes.labelsize": 9,
+        "axes.titlesize": 9,
+        "xtick.labelsize": 8,
+        "ytick.labelsize": 8,
+        "axes.labelcolor": INK,
+        "text.color": INK,
+        "xtick.color": INK_2,
+        "ytick.color": INK_2,
+        "axes.edgecolor": INK_2,
+        "axes.linewidth": 0.7,
+        "axes.facecolor": BG,
+        "legend.frameon": True,
+        "legend.edgecolor": INK_2,
+        "legend.facecolor": BG,
+        "legend.framealpha": 1.0,
+        "legend.fancybox": False,
+        "figure.facecolor": BG,
+        "savefig.facecolor": BG,
+    })
+
+
+apply_theme(LIGHT)
+
+
+def luminance(colour_spec) -> float:
+    r, g, b = matplotlib.colors.to_rgb(colour_spec)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def readable_on(background) -> str:
+    """Ink or canvas, whichever is further from the patch it sits on. Keeps the
+    heatmap labels legible in both themes without a per-theme threshold."""
+    lum = luminance(background)
+    return INK if abs(lum - luminance(INK)) > abs(lum - luminance(BG)) else BG
 
 
 def colour(model: str, *, soft: bool = False) -> str:
     """One hue per backbone family; the two Qwen and the two ColSmol pair up."""
-    return FAMILY[model]
+    return THEME.hues[FAMILY_OF[model]]
 
 
 def record(path: Path) -> dict:
@@ -197,16 +251,18 @@ def save(fig, stem: str, title: str, *, box: dict | None = None) -> None:
     else:
         fig.tight_layout(pad=0.3)
     # The report names its figures in a LaTeX caption, so the PDF carries none.
-    fig.savefig(PDF_DIR / f"{stem}.pdf", bbox_inches="tight", pad_inches=0.02)
+    # Only the light theme feeds LaTeX: the report is printed on paper.
+    if THEME.name == "light":
+        fig.savefig(PDF_DIR / f"{stem}.pdf", bbox_inches="tight", pad_inches=0.02)
     # The PNG stands alone in the README, so it keeps its headline and is
     # cropped to fit it. The fixed box above exists only to align the figures
     # stacked in the report's columns, which carry LaTeX captions instead.
     fig.suptitle(title, fontsize=9, fontweight="bold", color=INK,
                  x=0.0, y=1.04, ha="left")
-    fig.savefig(PNG_DIR / f"{stem}.png", dpi=200, bbox_inches="tight",
-                pad_inches=0.05)
+    fig.savefig(PNG_DIR / f"{stem}{THEME.suffix}.png", dpi=200,
+                bbox_inches="tight", pad_inches=0.05)
     plt.close(fig)
-    print(f"wrote {stem}.pdf / {stem}.png")
+    print(f"wrote {stem}{THEME.suffix}.png" + ("" if THEME.name != "light" else f" / {stem}.pdf"))
 
 
 # --- Figure 1: quality and cost on the biomedical lecture corpus -------------
@@ -290,7 +346,7 @@ def fig_retrieval_cost() -> None:
     for m in MODELS:
         offset, ha = placement.get(m, ((7, 0), "left"))
         ax.scatter(costs[m], scores[m], s=40, color=colour(m), zorder=3,
-                   edgecolor="white", linewidth=0.9)
+                   edgecolor=BG, linewidth=0.9)
         ax.annotate(LABELS[m], (costs[m], scores[m]), textcoords="offset points",
                     xytext=offset, ha=ha, va="center", fontsize=7.5, color=INK_2)
 
@@ -325,7 +381,7 @@ def fig_query_language() -> None:
         ax.plot(range(len(steps)), ys, marker=marker, markersize=3.6,
                 linewidth=1.5,
                 linestyle=dash if dash else "-",
-                color=colour(m), zorder=3, markeredgecolor="white",
+                color=colour(m), zorder=3, markeredgecolor=BG,
                 markeredgewidth=0.6, clip_on=False, label=LABELS[m])
     # Six lines cannot be told apart by colour alone — two families hold two
     # models each — so a real legend names every model. It sits inside the
@@ -367,12 +423,11 @@ def fig_multilingual_heatmap() -> None:
     for i, (_, vals) in enumerate(rows):
         for j, v in enumerate(vals):
             ax.add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1, fill=False,
-                                       edgecolor="white", linewidth=1.6, zorder=2))
-            r, g, b, _ = cmap(norm(v))
-            # Flip to white only where black ink would drop under ~4.5:1.
-            luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+                                       edgecolor=BG, linewidth=1.6, zorder=2))
+            # Ink on the pale cells, canvas colour on the saturated ones —
+            # picked by distance, so it holds whichever way the ramp runs.
             ax.text(j, i, num(v, 2), ha="center", va="center", fontsize=7.6,
-                    zorder=3, color="white" if luminance < 0.45 else INK)
+                    zorder=3, color=readable_on(cmap(norm(v))))
 
     ax.set_xticks(range(len(LANGS)))
     ax.set_xticklabels([LANG_LABELS[lang] for lang in LANGS], color=INK_2)
@@ -387,7 +442,7 @@ def fig_multilingual_heatmap() -> None:
     for side in ("top", "right", "bottom", "left"):
         ax.spines[side].set_visible(False)
     # A visible gap between the encoders and the text reference rows.
-    ax.axhline(len(MODELS) - 0.5, color="white", linewidth=4.5, zorder=4)
+    ax.axhline(len(MODELS) - 0.5, color=BG, linewidth=4.5, zorder=4)
 
     # No colour bar: every cell prints its own value, so the scale would only
     # restate what the reader already has, and it costs a fifth of the width.
@@ -398,10 +453,12 @@ def fig_multilingual_heatmap() -> None:
 
 
 def main() -> None:
-    fig_retrieval_quality()
-    fig_retrieval_cost()
-    fig_query_language()
-    fig_multilingual_heatmap()
+    for theme in (LIGHT, DARK):
+        apply_theme(theme)
+        fig_retrieval_quality()
+        fig_retrieval_cost()
+        fig_query_language()
+        fig_multilingual_heatmap()
 
 
 if __name__ == "__main__":
