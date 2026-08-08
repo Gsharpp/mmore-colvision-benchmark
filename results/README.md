@@ -34,6 +34,17 @@ favours text retrievers — the standing limitation of that study.
   the id convention.
 - `track_a_pmc_tiny/` — the abandoned PMC-OA Track A design (palier `tiny`),
   replaced by the ViDoRe corpus.
+- `track_a_colsmol_partial_index/` and `track_b_vidore_colsmol_partial_index/` —
+  the two ColSmol cells, scored against an index that held only part of the
+  corpus. Counting Milvus entities against ingested parquet rows showed
+  ColSmol-500M had ingested 707 of 1016 pages and ColSmol-256M 777: an
+  interrupted ingestion, resumed under `skip_already_processed: true`, left a
+  truncated parquet and never said so. Any query whose relevant page was missing
+  was lost outright, so the scores were a property of the run, not of the model.
+  Re-ingested and re-scored (a real GPU re-run this time, unlike the page-offset
+  fix): Track A nDCG@5 went 0.390 → 0.554 for ColSmol-500M and 0.358 → 0.526 for
+  ColSmol-256M, which moves both encoders from *below* the text baselines to
+  above them. Vector counts per page are unaffected (1001 and 1024).
 
 ## Known caveats before quoting these numbers
 
